@@ -531,7 +531,7 @@ def match_handicap_scores_to_courses(user_id: str):
     unmatched_response = (
         supabase
         .table("handicap_scores")
-        .select("id,course_name")
+        .select("score_id,course_name,play_date")
         .eq("user_id", user_id)
         .is_("course_id", "null")
         .execute()
@@ -550,7 +550,7 @@ def match_handicap_scores_to_courses(user_id: str):
         if course.get("name")
     }
 
-    groups: dict[str, list[int]] = {}
+    groups: dict[str, list[tuple[int, str]]] = {}
     display_names: dict[str, str] = {}
 
     for score in unmatched:
@@ -560,34 +560,34 @@ def match_handicap_scores_to_courses(user_id: str):
             continue
 
         key = _normalize_course_name(raw_name)
-        groups.setdefault(key, []).append(score["id"])
+        groups.setdefault(key, []).append((score["score_id"], score["play_date"]))
         display_names.setdefault(key, raw_name)
 
-    matched = 0
-    created = 0
+    # One bulk insert/upsert per sync instead of one round trip per distinct
+    # course name — a heavy first-time sync (hundreds of historical rounds
+    # across many courses) was slow enough to hit the request/gateway
+    # timeout before finishing, so the sync never got marked complete and
+    # kept silently re-running on every page load.
+    new_keys = [key for key in groups if key not in by_normalized]
 
-    for key, score_ids in groups.items():
-        course_id = by_normalized.get(key)
-
-        if not course_id:
-            insert_response = (
-                supabase
-                .table("courses")
-                .insert({"name": display_names[key].title()})
-                .execute()
-            )
-            course_id = insert_response.data[0]["id"]
-            by_normalized[key] = course_id
-            created += 1
-
-        (
+    if new_keys:
+        insert_response = (
             supabase
-            .table("handicap_scores")
-            .update({"course_id": course_id})
-            .in_("id", score_ids)
+            .table("courses")
+            .insert([{"name": display_names[key].title()} for key in new_keys])
             .execute()
         )
 
-        matched += len(score_ids)
+        for course in insert_response.data:
+            by_normalized[_normalize_course_name(course["name"])] = course["id"]
 
-    return {"matched": matched, "created_courses": created}
+    score_updates = [
+        {"score_id": score_id, "course_id": by_normalized[key], "play_date": play_date}
+        for key, scores in groups.items()
+        for score_id, play_date in scores
+    ]
+
+    if score_updates:
+        supabase.table("handicap_scores").upsert(score_updates, on_conflict="score_id").execute()
+
+    return {"matched": len(score_updates), "created_courses": len(new_keys)}
