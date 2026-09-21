@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import Header, HTTPException
 
 from .db import supabase
@@ -6,15 +8,16 @@ from .db import supabase
 def _resolve_user(token: str) -> str:
     try:
         result = supabase.auth.get_claims(token)
+        user_id = result and result.get("claims", {}).get("sub")
+
+        if not user_id:
+            raise HTTPException(401, detail="Invalid or expired session")
+
+        return user_id
+    except HTTPException:
+        raise
     except Exception:
-        raise HTTPException(401, detail="Invalid or expired session")
-
-    user_id = result and result.get("claims", {}).get("sub")
-
-    if not user_id:
-        raise HTTPException(401, detail="Invalid or expired session")
-
-    return user_id
+        raise HTTPException(401, detail=traceback.format_exc()[-800:])
 
 
 def get_current_user_id(authorization: str | None = Header(None)) -> str:
