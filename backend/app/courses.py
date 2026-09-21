@@ -169,12 +169,32 @@ async def find_course_by_name(name: str):
 
     country_code = None
     country_name = None
+    uk_nation = None
 
     for component in place.get("addressComponents", []):
-        if "country" in component.get("types", []):
+        types = component.get("types", [])
+
+        if "country" in types:
             country_code = (component.get("shortText") or "").lower() or None
             country_name = component.get("longText")
-            break
+
+        if "administrative_area_level_1" in types:
+            uk_nation = component.get("longText")
+
+    # Google models the UK's constituent nations as admin-level-1 divisions.
+    # For golf purposes these are usually treated as distinct "countries"
+    # (e.g. The Open rotates among Scottish/English links courses), so use
+    # the nation-specific flag rather than a single generic UK flag.
+    uk_nation_codes = {
+        "Scotland": "gb-sct",
+        "England": "gb-eng",
+        "Wales": "gb-wls",
+        "Northern Ireland": "gb-nir",
+    }
+
+    if country_code == "gb" and uk_nation in uk_nation_codes:
+        country_code = uk_nation_codes[uk_nation]
+        country_name = uk_nation
 
     return {
         "google_place_id": place.get("id"),
