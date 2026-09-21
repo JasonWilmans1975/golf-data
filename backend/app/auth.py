@@ -10,8 +10,8 @@ def _resolve_user(token: str) -> str:
 
     for attempt in range(3):
         try:
-            result = supabase.auth.get_claims(token)
-            user_id = result and result.get("claims", {}).get("sub")
+            result = supabase.auth.get_user(token)
+            user_id = result and result.user and result.user.id
             break
         except Exception:
             if attempt < 2:
