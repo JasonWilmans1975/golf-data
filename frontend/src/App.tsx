@@ -12,6 +12,7 @@ import "./styles.css";
 import StatsPage from "./StatsPage";
 import MapPage from "./MapPage";
 import HandicapPage from "./HandicapPage";
+import WellnessPage from "./WellnessPage";
 import LoginPage from "./LoginPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -301,6 +302,13 @@ function Dashboard() {
                         onClick={() => navigate("/handicap")}
                     >
                         Handicap
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/wellness")}
+                    >
+                        Wellness
                     </button>
 
                     <button
@@ -1025,6 +1033,15 @@ function AppRoutes() {
                 element={
                     <RequireAuth>
                         <HandicapPage />
+                    </RequireAuth>
+                }
+            />
+
+            <Route
+                path="/wellness"
+                element={
+                    <RequireAuth>
+                        <WellnessPage />
                     </RequireAuth>
                 }
             />

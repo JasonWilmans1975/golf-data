@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -240,6 +241,23 @@ async def garmin_sync(force: bool = False, user_id: str = Depends(get_current_us
         return await sync_garmin_data(user_id, force=force)
     except RuntimeError as exc:
         raise HTTPException(502, detail=str(exc))
+
+
+@app.get("/garmin/wellness")
+def garmin_wellness(days: int = 120, user_id: str = Depends(get_current_user_id)):
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+
+    response = (
+        supabase
+        .table("garmin_daily_stats")
+        .select("*")
+        .eq("user_id", user_id)
+        .gte("stat_date", since)
+        .order("stat_date")
+        .execute()
+    )
+
+    return response.data
 
 
 class HandicapCredentials(BaseModel):

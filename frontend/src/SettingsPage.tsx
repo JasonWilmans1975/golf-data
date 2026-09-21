@@ -142,6 +142,13 @@ function SettingsPage() {
                         Home
                     </button>
 
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/wellness")}
+                    >
+                        Wellness
+                    </button>
+
                     <button className="header-secondary-button" onClick={handleLogout}>
                         Log out
                     </button>

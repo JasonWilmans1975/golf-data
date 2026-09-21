@@ -129,3 +129,19 @@ create table if not exists public.garmin_sync_state (
   user_id uuid primary key,
   last_synced_at timestamptz
 );
+
+create table if not exists public.garmin_daily_stats (
+  user_id uuid not null,
+  stat_date date not null,
+  total_calories integer,
+  active_calories integer,
+  resting_calories integer,
+  average_heart_rate integer,
+  resting_heart_rate integer,
+  sleep_score integer,
+  sleep_score_qualifier text,
+  sleep_seconds integer,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  primary key (user_id, stat_date)
+);

@@ -10,17 +10,35 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import { API, authFetch } from "./api";
+import ThemeToggle from "./ThemeToggle";
+import { useTheme } from "./useTheme";
 
-const CHART_ACCENT = "#e8b84b";
-const CHART_GRID = "rgba(255,255,255,0.08)";
-const CHART_TICK = { fill: "#8b93a1", fontSize: 11 };
-const CHART_TOOLTIP_STYLE = {
-    background: "#191c22",
-    border: "1px solid rgba(255,255,255,0.16)",
-    borderRadius: 4,
-    color: "#f4f5f7",
-};
-const CHART_TOOLTIP_LABEL_STYLE = { color: "#8b93a1" };
+const CHART_PALETTES = {
+    dark: {
+        accent: "#e8b84b",
+        grid: "rgba(255,255,255,0.08)",
+        tick: { fill: "#8b93a1", fontSize: 11 },
+        tooltipStyle: {
+            background: "#191c22",
+            border: "1px solid rgba(255,255,255,0.16)",
+            borderRadius: 4,
+            color: "#f4f5f7",
+        },
+        tooltipLabelStyle: { color: "#8b93a1" },
+    },
+    light: {
+        accent: "#e2231a",
+        grid: "rgba(20,20,30,0.1)",
+        tick: { fill: "#6b7280", fontSize: 11 },
+        tooltipStyle: {
+            background: "#ffffff",
+            border: "1px solid rgba(20,20,30,0.15)",
+            borderRadius: 4,
+            color: "#14141c",
+        },
+        tooltipLabelStyle: { color: "#6b7280" },
+    },
+} as const;
 
 type HandicapSnapshot = {
     recorded_at: string;
@@ -53,6 +71,8 @@ function formatDate(value: string) {
 
 function HandicapPage() {
     const navigate = useNavigate();
+    const { theme } = useTheme();
+    const chart = CHART_PALETTES[theme];
 
     const [history, setHistory] = useState<HandicapSnapshot[]>([]);
     const [scores, setScores] = useState<Score[]>([]);
@@ -199,10 +219,19 @@ function HandicapPage() {
 
                     <button
                         className="header-secondary-button"
+                        onClick={() => navigate("/wellness")}
+                    >
+                        Wellness
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
                         onClick={() => navigate("/settings")}
                     >
                         Settings
                     </button>
+
+                    <ThemeToggle />
                 </div>
             </header>
 
@@ -260,18 +289,18 @@ function HandicapPage() {
                             {trend.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={340}>
                                     <LineChart data={trend}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
-                                        <XAxis dataKey="date" tick={CHART_TICK} />
-                                        <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={CHART_TICK} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                                        <XAxis dataKey="date" tick={chart.tick} />
+                                        <YAxis domain={["dataMin - 1", "dataMax + 1"]} tick={chart.tick} />
                                         <Tooltip
-                                            contentStyle={CHART_TOOLTIP_STYLE}
-                                            labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+                                            contentStyle={chart.tooltipStyle}
+                                            labelStyle={chart.tooltipLabelStyle}
                                             formatter={(value) => [value, "Handicap"]}
                                         />
                                         <Line
                                             type="monotone"
                                             dataKey="handicap"
-                                            stroke={CHART_ACCENT}
+                                            stroke="#3b82f6"
                                             strokeWidth={3}
                                             dot={false}
                                         />

@@ -12,17 +12,35 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import { API, authFetch } from "./api";
+import ThemeToggle from "./ThemeToggle";
+import { useTheme } from "./useTheme";
 
-const CHART_ACCENT = "#e8b84b";
-const CHART_GRID = "rgba(255,255,255,0.08)";
-const CHART_TICK = { fill: "#8b93a1", fontSize: 11 };
-const CHART_TOOLTIP_STYLE = {
-    background: "#191c22",
-    border: "1px solid rgba(255,255,255,0.16)",
-    borderRadius: 4,
-    color: "#f4f5f7",
-};
-const CHART_TOOLTIP_LABEL_STYLE = { color: "#8b93a1" };
+const CHART_PALETTES = {
+    dark: {
+        accent: "#e8b84b",
+        grid: "rgba(255,255,255,0.08)",
+        tick: { fill: "#8b93a1", fontSize: 11 },
+        tooltipStyle: {
+            background: "#191c22",
+            border: "1px solid rgba(255,255,255,0.16)",
+            borderRadius: 4,
+            color: "#f4f5f7",
+        },
+        tooltipLabelStyle: { color: "#8b93a1" },
+    },
+    light: {
+        accent: "#e2231a",
+        grid: "rgba(20,20,30,0.1)",
+        tick: { fill: "#6b7280", fontSize: 11 },
+        tooltipStyle: {
+            background: "#ffffff",
+            border: "1px solid rgba(20,20,30,0.15)",
+            borderRadius: 4,
+            color: "#14141c",
+        },
+        tooltipLabelStyle: { color: "#6b7280" },
+    },
+} as const;
 
 type Activity = {
     id: number;
@@ -54,6 +72,8 @@ type ScoreDate = {
 
 function StatsPage() {
     const navigate = useNavigate();
+    const { theme } = useTheme();
+    const chart = CHART_PALETTES[theme];
 
     const [activities, setActivities] = useState<Activity[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
@@ -173,10 +193,19 @@ function StatsPage() {
 
                     <button
                         className="header-secondary-button"
+                        onClick={() => navigate("/wellness")}
+                    >
+                        Wellness
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
                         onClick={() => navigate("/settings")}
                     >
                         Settings
                     </button>
+
+                    <ThemeToggle />
                 </div>
             </header>
 
@@ -226,13 +255,13 @@ function StatsPage() {
                         <div className="chart-container">
                             <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={roundsByYear}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
-                                    <XAxis dataKey="year" tick={CHART_TICK} />
-                                    <YAxis allowDecimals={false} tick={CHART_TICK} />
-                                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                                    <XAxis dataKey="year" tick={chart.tick} />
+                                    <YAxis allowDecimals={false} tick={chart.tick} />
+                                    <Tooltip contentStyle={chart.tooltipStyle} labelStyle={chart.tooltipLabelStyle} />
                                     <Bar
                                         dataKey="rounds"
-                                        fill={CHART_ACCENT}
+                                        fill="#3b82f6"
                                         radius={[2, 2, 0, 0]}
                                     />
                                 </BarChart>
@@ -258,18 +287,18 @@ function StatsPage() {
                                         right: 20,
                                     }}
                                 >
-                                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} horizontal={false} />
-                                    <XAxis type="number" allowDecimals={false} tick={CHART_TICK} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
+                                    <XAxis type="number" allowDecimals={false} tick={chart.tick} />
                                     <YAxis
                                         type="category"
                                         dataKey="name"
                                         width={130}
-                                        tick={CHART_TICK}
+                                        tick={chart.tick}
                                     />
-                                    <Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelStyle={CHART_TOOLTIP_LABEL_STYLE} />
+                                    <Tooltip contentStyle={chart.tooltipStyle} labelStyle={chart.tooltipLabelStyle} />
                                     <Bar
                                         dataKey="rounds"
-                                        fill={CHART_ACCENT}
+                                        fill="#22c55e"
                                         radius={[0, 2, 2, 0]}
                                     />
                                 </BarChart>
@@ -288,23 +317,23 @@ function StatsPage() {
                         <div className="chart-container">
                             <ResponsiveContainer width="100%" height={330}>
                                 <LineChart data={distanceByMonth}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} vertical={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
                                     <XAxis
                                         dataKey="month"
-                                        tick={CHART_TICK}
+                                        tick={chart.tick}
                                     />
-                                    <YAxis tick={CHART_TICK} />
+                                    <YAxis tick={chart.tick} />
                                     <Tooltip
-                                        contentStyle={CHART_TOOLTIP_STYLE}
-                                        labelStyle={CHART_TOOLTIP_LABEL_STYLE}
+                                        contentStyle={chart.tooltipStyle}
+                                        labelStyle={chart.tooltipLabelStyle}
                                         formatter={(value) => [`${value} km`, "Distance"]}
                                     />
                                     <Line
                                         type="monotone"
                                         dataKey="distance"
-                                        stroke={CHART_ACCENT}
+                                        stroke="#3b82f6"
                                         strokeWidth={3}
-                                        dot={{ r: 4, fill: CHART_ACCENT }}
+                                        dot={{ r: 4, fill: "#3b82f6" }}
                                     />
                                 </LineChart>
                             </ResponsiveContainer>

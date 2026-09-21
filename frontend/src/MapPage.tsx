@@ -170,6 +170,13 @@ function MapPage() {
 
                     <button
                         className="header-secondary-button"
+                        onClick={() => navigate("/wellness")}
+                    >
+                        Wellness
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
                         onClick={() => navigate("/settings")}
                     >
                         Settings

@@ -1,7 +1,19 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
+import { useAuth } from "./AuthContext";
+import ThemeToggle from "./ThemeToggle";
 
 function LoginPage() {
+    const navigate = useNavigate();
+    const { session } = useAuth();
+
+    useEffect(() => {
+        if (session) {
+            navigate("/", { replace: true });
+        }
+    }, [session, navigate]);
+
     const [mode, setMode] = useState<"signin" | "signup">("signin");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -100,6 +112,10 @@ function LoginPage() {
                         ? "Need an account? Sign up"
                         : "Already have an account? Sign in"}
                 </button>
+
+                <div style={{ marginTop: 16, textAlign: "center" }}>
+                    <ThemeToggle />
+                </div>
             </div>
         </div>
     );

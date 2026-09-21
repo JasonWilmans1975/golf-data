@@ -913,6 +913,59 @@ button {
     text-transform: uppercase;
 }
 
+.granularity-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.granularity-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+}
+
+.granularity-toggle button {
+    background: var(--panel);
+    border: none;
+    padding: 8px 18px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+}
+
+.granularity-toggle button:last-child {
+    border-right: none;
+}
+
+.granularity-toggle button:hover {
+    color: var(--text);
+}
+
+.granularity-toggle button.active {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+.granularity-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.granularity-range input[type="date"] {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
 .chart-container {
     margin-top: 4px;
 }
