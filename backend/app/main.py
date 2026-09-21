@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from .config import settings
-from .db import supabase
+from .db import supabase, fetch_all
 from .auth import get_current_user_id, get_user_id_from_token
 from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities
 from .courses import (
@@ -119,27 +119,24 @@ async def sync(user_id: str = Depends(get_current_user_id)):
 
 @app.get("/activities")
 def activities(user_id: str = Depends(get_current_user_id)):
-    r = (
-        supabase.table("golf_activities")
+    rows = fetch_all(
+        lambda: supabase.table("golf_activities")
         .select("*")
         .eq("user_id", user_id)
         .order("start_date", desc=True)
-        .execute()
     )
-    return r.data
+    return rows
 
 @app.get("/stats")
 def stats(user_id: str = Depends(get_current_user_id)):
-    r = supabase.table("golf_activities").select("*").eq("user_id", user_id).execute()
-    rows = r.data or []
-
-    scores_r = (
-        supabase.table("handicap_scores")
-        .select("id")
-        .eq("user_id", user_id)
-        .execute()
+    rows = fetch_all(
+        lambda: supabase.table("golf_activities").select("*").eq("user_id", user_id).order("id")
     )
-    total_rounds = len(scores_r.data or []) or len(rows)
+
+    scores = fetch_all(
+        lambda: supabase.table("handicap_scores").select("id").eq("user_id", user_id).order("id")
+    )
+    total_rounds = len(scores) or len(rows)
 
     return {
         "rounds": total_rounds,
@@ -289,18 +286,17 @@ async def handicap_sync(force: bool = False, user_id: str = Depends(get_current_
 
 @app.get("/handicap")
 def handicap_history(user_id: str = Depends(get_current_user_id)):
-    response = (
-        supabase
+    rows = fetch_all(
+        lambda: supabase
         .table("handicap_scores")
         .select("play_date,handicap_index")
         .eq("user_id", user_id)
         .not_.is_("handicap_index", "null")
         .order("play_date")
-        .execute()
     )
 
     deduped = {}
-    for row in response.data or []:
+    for row in rows:
         deduped[row["play_date"]] = row["handicap_index"]
 
     return [

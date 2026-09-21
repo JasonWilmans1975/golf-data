@@ -4,7 +4,7 @@ import os
 import re
 
 from dotenv import load_dotenv
-from .db import supabase
+from .db import supabase, fetch_all
 
 load_dotenv()
 
@@ -442,18 +442,18 @@ def get_courses_for_user(user_id: str):
     # courses is a shared/global table (the same physical course is reused
     # across users), so this must only return courses this user has actually
     # played — otherwise every user sees every other user's courses too.
-    scores_response = (
-        supabase
+    scores = fetch_all(
+        lambda: supabase
         .table("handicap_scores")
         .select("course_id,play_date")
         .eq("user_id", user_id)
         .not_.is_("course_id", "null")
-        .execute()
+        .order("id")
     )
 
     stats_by_course = {}
 
-    for score in scores_response.data or []:
+    for score in scores:
         course_id = score["course_id"]
         play_date = score["play_date"]
 
@@ -528,16 +528,14 @@ def _normalize_course_name(name: str) -> str:
 
 
 def match_handicap_scores_to_courses(user_id: str):
-    unmatched_response = (
-        supabase
+    unmatched = fetch_all(
+        lambda: supabase
         .table("handicap_scores")
         .select("score_id,course_name,play_date")
         .eq("user_id", user_id)
         .is_("course_id", "null")
-        .execute()
+        .order("id")
     )
-
-    unmatched = unmatched_response.data or []
 
     if not unmatched:
         return {"matched": 0, "created_courses": 0}

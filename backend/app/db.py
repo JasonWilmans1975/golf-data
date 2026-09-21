@@ -19,3 +19,26 @@ supabase = create_client(
     settings.supabase_service_role_key,
     options=ClientOptions(httpx_client=_httpx_client),
 )
+
+PAGE_SIZE = 1000
+
+
+def fetch_all(build_query, page_size: int = PAGE_SIZE) -> list[dict]:
+    """Run a Supabase select past PostgREST's server-side max-rows cap
+    (1000 by default, and not something a client-side .limit() can raise).
+
+    `build_query` must return a *fresh*, unexecuted query builder each call
+    (e.g. a lambda), since .range() finalizes it for a single page.
+    """
+    rows: list[dict] = []
+    start = 0
+
+    while True:
+        page = build_query().range(start, start + page_size - 1).execute()
+        batch = page.data or []
+        rows.extend(batch)
+
+        if len(batch) < page_size:
+            return rows
+
+        start += page_size
