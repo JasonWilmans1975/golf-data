@@ -31,6 +31,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
+import ThemeToggle from "./ThemeToggle";
 
 type Course = {
     id: number;
@@ -117,6 +118,8 @@ function Dashboard() {
     const [stats, setStats] = useState<Stats>({});
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
+    const [garminSyncing, setGarminSyncing] = useState(false);
+    const [garminSyncError, setGarminSyncError] = useState<string | null>(null);
     const [mergingCourseId, setMergingCourseId] = useState<number | null>(null);
 
     async function handleMerge(sourceId: number, targetId: number) {
@@ -204,6 +207,37 @@ function Dashboard() {
         }
     }
 
+    async function handleGarminSync() {
+        setGarminSyncing(true);
+        setGarminSyncError(null);
+
+        try {
+            const response = await authFetch(`${API}/garmin/sync`, {
+                method: "POST",
+            });
+
+            if (response.status === 502) {
+                const body = await response.json().catch(() => null);
+                setGarminSyncError(
+                    body?.detail ||
+                        "Garmin sync failed — check your credentials in Settings"
+                );
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to sync Garmin activities");
+            }
+
+            await detectCourses();
+            await loadDashboard();
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setGarminSyncing(false);
+        }
+    }
+
     async function detectCourses() {
         try {
             const response = await authFetch(`${API}/courses/detect`, {
@@ -276,6 +310,8 @@ function Dashboard() {
                         Settings
                     </button>
 
+                    <ThemeToggle />
+
                     <button
                         className="sync-button"
                         disabled={syncing}
@@ -283,8 +319,22 @@ function Dashboard() {
                     >
                         {syncing ? "Syncing..." : "Sync Strava"}
                     </button>
+
+                    <button
+                        className="sync-button"
+                        disabled={garminSyncing}
+                        onClick={handleGarminSync}
+                    >
+                        {garminSyncing ? "Syncing..." : "Sync Garmin"}
+                    </button>
                 </div>
             </header>
+
+            {garminSyncError && (
+                <p className="auth-error" style={{ margin: "12px 48px 0" }}>
+                    {garminSyncError}
+                </p>
+            )}
 
             <main className="content">
                 <section className="hero">
@@ -675,6 +725,8 @@ function CourseDetail() {
                     >
                         World Map
                     </button>
+
+                    <ThemeToggle />
 
                     <button
                         className="sync-button"

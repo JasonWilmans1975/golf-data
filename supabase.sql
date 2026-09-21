@@ -107,3 +107,25 @@ create table if not exists public.handicap_credentials (
 
 alter table if exists public.courses add column if not exists country_code text;
 alter table if exists public.courses add column if not exists country_name text;
+
+-- Garmin Connect support (additional activity source alongside Strava)
+
+alter table if exists public.golf_activities alter column strava_activity_id drop not null;
+alter table if exists public.golf_activities alter column athlete_id drop not null;
+alter table if exists public.golf_activities add column if not exists source text not null default 'strava';
+alter table if exists public.golf_activities add column if not exists garmin_activity_id bigint;
+create unique index if not exists golf_activities_garmin_activity_id_idx on public.golf_activities(garmin_activity_id);
+
+create table if not exists public.garmin_credentials (
+  user_id uuid primary key,
+  email text not null,
+  encrypted_password text not null,
+  cached_token text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.garmin_sync_state (
+  user_id uuid primary key,
+  last_synced_at timestamptz
+);

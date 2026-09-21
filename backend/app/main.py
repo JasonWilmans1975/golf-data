@@ -17,6 +17,11 @@ from .courses import (
     get_countries_played,
 )
 from .handicap import sync_handicap_data, save_credentials, has_credentials
+from .garmin import (
+    sync_garmin_data,
+    save_credentials as save_garmin_credentials,
+    has_credentials as has_garmin_credentials,
+)
 
 COURSE_PHOTOS_BUCKET = "course-photos"
 
@@ -208,6 +213,33 @@ async def upload_course_photo(
     supabase.table("courses").update({"photo_url": photo_url}).eq("id", course_id).execute()
 
     return {"photo_url": photo_url}
+
+
+class GarminCredentials(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/garmin/credentials")
+def garmin_credentials(
+    body: GarminCredentials,
+    user_id: str = Depends(get_current_user_id),
+):
+    save_garmin_credentials(user_id, body.email, body.password)
+    return {"saved": True}
+
+
+@app.get("/garmin/credentials/status")
+def garmin_credentials_status(user_id: str = Depends(get_current_user_id)):
+    return {"connected": has_garmin_credentials(user_id)}
+
+
+@app.post("/garmin/sync")
+async def garmin_sync(force: bool = False, user_id: str = Depends(get_current_user_id)):
+    try:
+        return await sync_garmin_data(user_id, force=force)
+    except RuntimeError as exc:
+        raise HTTPException(502, detail=str(exc))
 
 
 class HandicapCredentials(BaseModel):
