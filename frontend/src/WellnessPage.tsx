@@ -5,6 +5,7 @@ import {
     Line,
     BarChart,
     Bar,
+    Cell,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -53,6 +54,9 @@ type DailyStat = {
     sleep_score: number | null;
     sleep_score_qualifier: string | null;
     sleep_seconds: number | null;
+    total_steps: number | null;
+    step_goal: number | null;
+    step_distance_m: number | null;
 };
 
 type Granularity = "day" | "week" | "month" | "custom";
@@ -89,6 +93,26 @@ function average(values: number[]): number | null {
     return Math.round(values.reduce((sum, v) => sum + v, 0) / values.length);
 }
 
+function total(values: number[]): number | null {
+    if (values.length === 0) return null;
+    return values.reduce((sum, v) => sum + v, 0);
+}
+
+// A day/week/month bar for the steps chart: green when the goal was hit,
+// otherwise a blue "actual" segment stacked under a gray "remaining" segment
+// up to the goal line (matches Garmin Connect's own steps chart).
+function stepsBarFields(steps: number | null, goal: number | null) {
+    const goalMet = steps != null && goal != null && steps >= goal;
+
+    return {
+        steps,
+        stepGoal: goal,
+        stepsBar: steps,
+        stepsShortfall: goalMet || steps == null || goal == null ? 0 : goal - steps,
+        goalMet,
+    };
+}
+
 function aggregateByKey(rows: DailyStat[], keyFn: (date: string) => string) {
     const buckets = new Map<
         string,
@@ -97,6 +121,8 @@ function aggregateByKey(rows: DailyStat[], keyFn: (date: string) => string) {
             restingCalories: number[];
             heartRate: number[];
             sleepScore: number[];
+            steps: number[];
+            stepGoal: number[];
         }
     >();
 
@@ -107,12 +133,16 @@ function aggregateByKey(rows: DailyStat[], keyFn: (date: string) => string) {
             restingCalories: [],
             heartRate: [],
             sleepScore: [],
+            steps: [],
+            stepGoal: [],
         };
 
         if (row.active_calories != null) bucket.activeCalories.push(row.active_calories);
         if (row.resting_calories != null) bucket.restingCalories.push(row.resting_calories);
         if (row.average_heart_rate != null) bucket.heartRate.push(row.average_heart_rate);
         if (row.sleep_score != null) bucket.sleepScore.push(row.sleep_score);
+        if (row.total_steps != null) bucket.steps.push(row.total_steps);
+        if (row.step_goal != null) bucket.stepGoal.push(row.step_goal);
 
         buckets.set(key, bucket);
     }
@@ -125,7 +155,45 @@ function aggregateByKey(rows: DailyStat[], keyFn: (date: string) => string) {
             restingCalories: average(bucket.restingCalories),
             heartRate: average(bucket.heartRate),
             sleepScore: average(bucket.sleepScore),
+            ...stepsBarFields(total(bucket.steps), total(bucket.stepGoal)),
         }));
+}
+
+function StepsRing({ steps, goal }: { steps: number | null; goal: number | null }) {
+    const pct = steps != null && goal != null && goal > 0 ? Math.min(steps / goal, 1) : 0;
+    const goalMet = steps != null && goal != null && steps >= goal;
+    const radius = 54;
+    const circumference = 2 * Math.PI * radius;
+    const color = goalMet ? "#22c55e" : "#3b82f6";
+
+    return (
+        <svg width={140} height={140} viewBox="0 0 140 140" style={{ flexShrink: 0 }}>
+            <circle cx={70} cy={70} r={radius} fill="none" stroke="var(--border)" strokeWidth={10} />
+            <circle
+                cx={70}
+                cy={70}
+                r={radius}
+                fill="none"
+                stroke={color}
+                strokeWidth={10}
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={circumference * (1 - pct)}
+                transform="rotate(-90 70 70)"
+            />
+            <text x={70} y={66} textAnchor="middle" fontSize={24} fontWeight={800} fill="var(--text)">
+                {steps != null ? steps.toLocaleString() : "—"}
+            </text>
+            <text x={70} y={86} textAnchor="middle" fontSize={13} fill="var(--text-muted)">
+                {goal != null ? goal.toLocaleString() : ""}
+            </text>
+            {goalMet && (
+                <text x={70} y={104} textAnchor="middle" fontSize={16} fill={color}>
+                    ✓
+                </text>
+            )}
+        </svg>
+    );
 }
 
 function WellnessPage() {
@@ -213,6 +281,7 @@ function WellnessPage() {
             restingCalories: day.resting_calories,
             heartRate: day.average_heart_rate,
             sleepScore: day.sleep_score,
+            ...stepsBarFields(day.total_steps, day.step_goal),
         }));
     }, [days, granularity, customStart, customEnd]);
 
@@ -283,6 +352,26 @@ function WellnessPage() {
                     </p>
                 </section>
 
+                <section className="steps-summary">
+                    <StepsRing steps={latest?.total_steps ?? null} goal={latest?.step_goal ?? null} />
+
+                    <div className="steps-summary-details">
+                        <div className="stat-card">
+                            <span>Steps {latest ? `(${formatDate(latest.stat_date)})` : ""}</span>
+                            <strong>{latest?.total_steps?.toLocaleString() ?? "—"}</strong>
+                        </div>
+
+                        <div className="stat-card">
+                            <span>Distance</span>
+                            <strong>
+                                {latest?.step_distance_m != null
+                                    ? `${(latest.step_distance_m / 1000).toFixed(1)} km`
+                                    : "—"}
+                            </strong>
+                        </div>
+                    </div>
+                </section>
+
                 <section className="stats-grid">
                     <div className="stat-card">
                         <span>Calories burned {latest ? `(${formatDate(latest.stat_date)})` : ""}</span>
@@ -346,6 +435,54 @@ function WellnessPage() {
                 </div>
 
                 <section className="chart-grid">
+                    <div className="chart-card">
+                        <div className="chart-heading">
+                            <div>
+                                <p className="eyebrow">TREND</p>
+                                <h3>Daily steps</h3>
+                            </div>
+                        </div>
+
+                        <div className="chart-container">
+                            {trend.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={240}>
+                                    <BarChart data={trend}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
+                                        <XAxis dataKey="date" tickFormatter={formatAxisLabel} tick={chart.tick} />
+                                        <YAxis tick={chart.tick} />
+                                        <Tooltip
+                                            contentStyle={chart.tooltipStyle}
+                                            labelStyle={chart.tooltipLabelStyle}
+                                            labelFormatter={(value) => formatAxisLabel(String(value))}
+                                            formatter={(value, name) => [
+                                                Number(value).toLocaleString(),
+                                                name,
+                                            ]}
+                                        />
+                                        <Bar dataKey="stepsBar" name="Steps" stackId="steps">
+                                            {trend.map((entry, index) => (
+                                                <Cell
+                                                    key={index}
+                                                    fill={entry.goalMet ? "#22c55e" : "#3b82f6"}
+                                                />
+                                            ))}
+                                        </Bar>
+                                        <Bar
+                                            dataKey="stepsShortfall"
+                                            name="Remaining to goal"
+                                            stackId="steps"
+                                            fill={chart.grid}
+                                        />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <p className="course-count">
+                                    {loading ? "Loading..." : "No wellness data yet."}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="chart-card">
                         <div className="chart-heading">
                             <div>

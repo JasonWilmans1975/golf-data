@@ -166,6 +166,10 @@ def _fetch_wellness(api: Garmin, days: int) -> list[dict]:
         entry.get("calendarDate"): entry.get("value")
         for entry in (api.get_rhr_daily(start_str, end_str) or [])
     }
+    steps_by_date = {
+        entry.get("calendarDate"): entry
+        for entry in (api.get_daily_steps(start_str, end_str) or [])
+    }
 
     dates = [(start + timedelta(days=i)).isoformat() for i in range(days)]
 
@@ -181,6 +185,7 @@ def _fetch_wellness(api: Garmin, days: int) -> list[dict]:
     for day in dates:
         calories = calories_by_date.get(day) or {}
         sleep = sleep_by_date.get(day) or {}
+        steps = steps_by_date.get(day) or {}
 
         rows.append({
             "stat_date": day,
@@ -192,6 +197,9 @@ def _fetch_wellness(api: Garmin, days: int) -> list[dict]:
             "sleep_score": sleep.get("sleepScore"),
             "sleep_score_qualifier": sleep.get("sleepScoreQuality"),
             "sleep_seconds": sleep.get("totalSleepTimeInSeconds"),
+            "total_steps": _to_int(steps.get("totalSteps")),
+            "step_goal": _to_int(steps.get("stepGoal")),
+            "step_distance_m": _to_int(steps.get("totalDistance")),
         })
 
     return rows

@@ -141,6 +141,9 @@ create table if not exists public.garmin_daily_stats (
   sleep_score integer,
   sleep_score_qualifier text,
   sleep_seconds integer,
+  total_steps integer,
+  step_goal integer,
+  step_distance_m integer,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   primary key (user_id, stat_date)
