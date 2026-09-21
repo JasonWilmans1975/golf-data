@@ -2,32 +2,17 @@ import httpx
 from supabase import create_client, ClientOptions
 from .config import settings
 
-
-class RetryTransport(httpx.HTTPTransport):
-    """Retries requests that fail with a transient network/protocol error.
-
-    Render's outbound connections to Supabase intermittently hit HTTP/2
-    stream resets (httpx.RemoteProtocolError) that aren't covered by
-    httpx's built-in connection-level retries.
-    """
-
-    def __init__(self, retries: int = 3, **kwargs):
-        super().__init__(**kwargs)
-        self._retries = retries
-
-    def handle_request(self, request):
-        last_exc = None
-
-        for attempt in range(self._retries):
-            try:
-                return super().handle_request(request)
-            except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError) as exc:
-                last_exc = exc
-
-        raise last_exc
-
-
-_httpx_client = httpx.Client(transport=RetryTransport(retries=3), timeout=30)
+# Supabase's edge (Cloudflare) can close a pooled HTTP/2 connection at the
+# exact moment a client tries to reuse it for a new request, causing
+# httpx.RemoteProtocolError (a known race, not specific to this app —
+# see https://github.com/supabase/supabase-py/issues/1064). Disabling
+# connection reuse entirely means every request opens a fresh connection,
+# which avoids the race at the cost of a slightly slower per-request
+# handshake — an acceptable tradeoff for this app's traffic volume.
+_httpx_client = httpx.Client(
+    limits=httpx.Limits(max_keepalive_connections=0),
+    timeout=30,
+)
 
 supabase = create_client(
     settings.supabase_url,
