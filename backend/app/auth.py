@@ -6,12 +6,13 @@ from .db import supabase
 def _resolve_user(token: str) -> str:
     try:
         result = supabase.auth.get_claims(token)
-        user_id = result and result.get("claims", {}).get("sub")
-    except Exception:
-        user_id = None
+    except Exception as exc:
+        raise HTTPException(401, detail=f"get_claims failed: {type(exc).__name__}: {exc}")
+
+    user_id = result and result.get("claims", {}).get("sub")
 
     if not user_id:
-        raise HTTPException(401, detail="Invalid or expired session")
+        raise HTTPException(401, detail=f"No sub in claims: {result!r}")
 
     return user_id
 
