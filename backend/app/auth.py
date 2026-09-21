@@ -1,18 +1,24 @@
+import time
+
 from fastapi import Header, HTTPException
 
 from .db import supabase
 
 
 def _resolve_user(token: str) -> str:
-    try:
-        result = supabase.auth.get_claims(token)
-    except Exception as exc:
-        raise HTTPException(401, detail=f"get_claims failed: {type(exc).__name__}: {exc}")
+    user_id = None
 
-    user_id = result and result.get("claims", {}).get("sub")
+    for attempt in range(3):
+        try:
+            result = supabase.auth.get_claims(token)
+            user_id = result and result.get("claims", {}).get("sub")
+            break
+        except Exception:
+            if attempt < 2:
+                time.sleep(0.3)
 
     if not user_id:
-        raise HTTPException(401, detail=f"No sub in claims: {result!r}")
+        raise HTTPException(401, detail="Invalid or expired session")
 
     return user_id
 
