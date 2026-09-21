@@ -1,8 +1,9 @@
+import traceback
 import uuid
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from .config import settings
 from .db import supabase
@@ -21,6 +22,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": traceback.format_exc()[-1500:]},
+    )
 
 @app.get("/health")
 def health():
@@ -48,7 +57,7 @@ async def auth_callback(code: str | None = None, error: str | None = None, state
         "athlete": athlete,
     }
     supabase.table("strava_tokens").upsert(row, on_conflict="athlete_id").execute()
-    return RedirectResponse(f"{settings.frontend_url}/?connected=1")
+    return RedirectResponse(f"{settings.app_url}/?connected=1")
 
 @app.post("/sync")
 async def sync(user_id: str = Depends(get_current_user_id)):
