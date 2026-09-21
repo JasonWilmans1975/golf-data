@@ -7,18 +7,20 @@ from .db import supabase
 
 def _resolve_user(token: str) -> str:
     user_id = None
+    last_error = None
 
     for attempt in range(3):
         try:
             result = supabase.auth.get_user(token)
             user_id = result and result.user and result.user.id
             break
-        except Exception:
+        except Exception as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
             if attempt < 2:
                 time.sleep(0.3)
 
     if not user_id:
-        raise HTTPException(401, detail="Invalid or expired session")
+        raise HTTPException(401, detail=f"Invalid or expired session ({last_error})")
 
     return user_id
 
