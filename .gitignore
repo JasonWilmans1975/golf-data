@@ -1,0 +1,20 @@
+# Environment secrets
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/app/__pycache__/
+*.pyc
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# Editor / OS
+.idea/
+.DS_Store
