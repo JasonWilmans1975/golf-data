@@ -116,6 +116,15 @@ alter table if exists public.golf_activities add column if not exists source tex
 alter table if exists public.golf_activities add column if not exists garmin_activity_id bigint;
 create unique index if not exists golf_activities_garmin_activity_id_idx on public.golf_activities(garmin_activity_id);
 
+-- Course profile info (website, phone, description, a representative photo)
+-- pulled from Google Places Details for each played course.
+
+alter table if exists public.courses add column if not exists website_url text;
+alter table if exists public.courses add column if not exists phone_number text;
+alter table if exists public.courses add column if not exists description text;
+alter table if exists public.courses add column if not exists google_photo_url text;
+alter table if exists public.courses add column if not exists details_fetched_at timestamptz;
+
 create table if not exists public.garmin_credentials (
   user_id uuid primary key,
   email text not null,

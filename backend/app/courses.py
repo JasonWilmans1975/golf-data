@@ -2,6 +2,7 @@ import math
 import httpx
 import os
 import re
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from .db import supabase, fetch_all
@@ -274,6 +275,123 @@ async def backfill_country_info():
             supabase.table("courses").update({
                 "country_code": result["country_code"],
                 "country_name": result["country_name"],
+            }).eq("id", course["id"]).execute()
+
+            updated += 1
+
+        except Exception as exc:
+            failed.append({
+                "course_id": course["id"],
+                "name": course["name"],
+                "reason": str(exc),
+            })
+
+    return {"checked": len(courses), "updated": updated, "failed": failed}
+
+
+GOOGLE_PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places"
+
+
+async def _fetch_place_details(place_id: str) -> dict:
+    headers = {
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": "websiteUri,nationalPhoneNumber,editorialSummary,photos",
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(
+            f"{GOOGLE_PLACE_DETAILS_URL}/{place_id}",
+            headers=headers,
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+async def _fetch_photo_url(photo_name: str) -> str | None:
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(
+            f"https://places.googleapis.com/v1/{photo_name}/media",
+            params={
+                "maxWidthPx": 800,
+                "skipHttpRedirect": "true",
+                "key": GOOGLE_MAPS_API_KEY,
+            },
+        )
+
+        if response.status_code != 200:
+            return None
+
+        return response.json().get("photoUri")
+
+
+async def backfill_course_details():
+    """Pull website/phone/description/a representative photo from Google
+    Places for every played course, resolving a Place ID by name first for
+    any course that doesn't have one yet (e.g. created purely from a
+    handicaps.co.za name match, never geocoded).
+    """
+    response = (
+        supabase
+        .table("courses")
+        .select("id,name,google_place_id")
+        .is_("details_fetched_at", "null")
+        .execute()
+    )
+
+    courses = response.data or []
+
+    updated = 0
+    failed = []
+
+    for course in courses:
+        place_id = course.get("google_place_id")
+
+        try:
+            if not place_id:
+                match = await find_course_by_name(course["name"])
+
+                if match and match.get("google_place_id"):
+                    place_id = match["google_place_id"]
+
+                    try:
+                        supabase.table("courses").update(match).eq("id", course["id"]).execute()
+                    except Exception:
+                        # Another course row already owns this Place ID —
+                        # a sub-course at the same resort with no distinct
+                        # Google listing (same pattern as manually-fixed
+                        # cases). Keep the location fields, but leave
+                        # google_place_id unset on this row to avoid the
+                        # unique-constraint clash; still use the resolved
+                        # place_id below to fetch this course's own details.
+                        location_only = {
+                            k: v for k, v in match.items() if k != "google_place_id"
+                        }
+                        supabase.table("courses").update(location_only).eq(
+                            "id", course["id"]
+                        ).execute()
+
+            if not place_id:
+                failed.append({
+                    "course_id": course["id"],
+                    "name": course["name"],
+                    "reason": "No Google Place match",
+                })
+                continue
+
+            details = await _fetch_place_details(place_id)
+
+            photo_url = None
+            photos = details.get("photos") or []
+
+            if photos:
+                photo_url = await _fetch_photo_url(photos[0]["name"])
+
+            supabase.table("courses").update({
+                "website_url": details.get("websiteUri"),
+                "phone_number": details.get("nationalPhoneNumber"),
+                "description": (details.get("editorialSummary") or {}).get("text"),
+                "google_photo_url": photo_url,
+                "details_fetched_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", course["id"]).execute()
 
             updated += 1

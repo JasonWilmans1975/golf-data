@@ -815,6 +815,55 @@ button {
     border-radius: 2px;
 }
 
+.course-info-card {
+    display: flex;
+    gap: 24px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+}
+
+.course-info-photo {
+    width: 220px;
+    height: 160px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.course-info-details {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+    min-width: 220px;
+    flex: 1;
+}
+
+.course-info-description {
+    color: var(--text);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.course-info-links {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.course-info-links a {
+    color: #3b82f6;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.course-info-links a:hover {
+    text-decoration: underline;
+}
+
 .leaflet-div-icon {
     background: transparent;
     border: none;

@@ -15,6 +15,7 @@ from .courses import (
     merge_courses,
     geocode_courses_without_gps,
     backfill_country_info,
+    backfill_course_details,
     get_countries_played,
 )
 from .handicap import sync_handicap_data, save_credentials, has_credentials
@@ -159,6 +160,11 @@ async def courses_geocode(user_id: str = Depends(get_current_user_id)):
 @app.post("/courses/backfill-countries")
 async def courses_backfill_countries(user_id: str = Depends(get_current_user_id)):
     return await backfill_country_info()
+
+
+@app.post("/courses/backfill-details")
+async def courses_backfill_details(user_id: str = Depends(get_current_user_id)):
+    return await backfill_course_details()
 
 
 @app.get("/courses")

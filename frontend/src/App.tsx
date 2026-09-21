@@ -47,6 +47,10 @@ type Course = {
     last_played: string | null;
     formatted_address: string | null;
     photo_url: string | null;
+    website_url: string | null;
+    phone_number: string | null;
+    description: string | null;
+    google_photo_url: string | null;
 };
 
 type Activity = {
@@ -771,6 +775,47 @@ function CourseDetail() {
                         />
                     </label>
                 </section>
+
+                {(course.google_photo_url ||
+                    course.description ||
+                    course.website_url ||
+                    course.phone_number) && (
+                    <section className="course-info-card">
+                        {course.google_photo_url && !course.photo_url && (
+                            <img
+                                className="course-info-photo"
+                                src={course.google_photo_url}
+                                alt={course.name}
+                            />
+                        )}
+
+                        <div className="course-info-details">
+                            {course.description && (
+                                <p className="course-info-description">
+                                    {course.description}
+                                </p>
+                            )}
+
+                            <div className="course-info-links">
+                                {course.website_url && (
+                                    <a
+                                        href={course.website_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        Visit website
+                                    </a>
+                                )}
+
+                                {course.phone_number && (
+                                    <a href={`tel:${course.phone_number}`}>
+                                        {course.phone_number}
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+                )}
 
                 <section className="stats-grid">
                     <div className="stat-card">
