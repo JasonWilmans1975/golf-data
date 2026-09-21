@@ -439,8 +439,9 @@ async def detect_all_courses(user_id: str):
 
 
 def get_courses_for_user(user_id: str):
-    courses_response = supabase.table("courses").select("*").order("name").execute()
-
+    # courses is a shared/global table (the same physical course is reused
+    # across users), so this must only return courses this user has actually
+    # played — otherwise every user sees every other user's courses too.
     scores_response = (
         supabase
         .table("handicap_scores")
@@ -466,18 +467,22 @@ def get_courses_for_user(user_id: str):
         stats["first_played"] = min(stats["first_played"], play_date)
         stats["last_played"] = max(stats["last_played"], play_date)
 
-    result = []
+    if not stats_by_course:
+        return []
 
-    for course in courses_response.data or []:
-        stats = stats_by_course.get(course["id"], {
-            "rounds_played": 0,
-            "first_played": None,
-            "last_played": None,
-        })
+    courses_response = (
+        supabase
+        .table("courses")
+        .select("*")
+        .in_("id", list(stats_by_course.keys()))
+        .order("name")
+        .execute()
+    )
 
-        result.append({**course, **stats})
-
-    return result
+    return [
+        {**course, **stats_by_course[course["id"]]}
+        for course in courses_response.data or []
+    ]
 
 
 def merge_courses(source_id: int, target_id: int):

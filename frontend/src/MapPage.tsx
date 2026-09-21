@@ -90,7 +90,7 @@ function MapPage() {
 
                 const data: Course[] = await coursesRes.json();
 
-                setCourses(data.filter((course) => course.rounds_played > 0));
+                setCourses(data);
                 setCountries(await countriesRes.json());
             } finally {
                 setLoading(false);
