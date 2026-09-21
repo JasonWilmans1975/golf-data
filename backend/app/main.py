@@ -1,4 +1,3 @@
-import traceback
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File
@@ -35,7 +34,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
     return JSONResponse(
         status_code=500,
-        content={"detail": traceback.format_exc()[-1200:]},
+        content={"detail": "Internal server error"},
         headers=headers,
     )
 
