@@ -120,6 +120,99 @@ async def find_nearest_golf_course(lat: float, lon: float):
     return candidates[0]
 
 
+GOOGLE_PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
+
+
+async def find_course_by_name(name: str):
+    if not GOOGLE_MAPS_API_KEY:
+        raise RuntimeError(
+            "GOOGLE_MAPS_API_KEY is not set — required for course geocoding"
+        )
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+        "X-Goog-FieldMask": (
+            "places.id,"
+            "places.displayName,"
+            "places.formattedAddress,"
+            "places.location"
+        ),
+    }
+
+    payload = {
+        "textQuery": f"{name} golf course",
+        "maxResultCount": 1,
+    }
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            GOOGLE_PLACES_TEXT_SEARCH_URL,
+            headers=headers,
+            json=payload,
+        )
+
+        response.raise_for_status()
+        data = response.json()
+
+    places = data.get("places", [])
+
+    if not places:
+        return None
+
+    place = places[0]
+    location = place.get("location", {})
+
+    if location.get("latitude") is None or location.get("longitude") is None:
+        return None
+
+    return {
+        "google_place_id": place.get("id"),
+        "formatted_address": place.get("formattedAddress"),
+        "latitude": location["latitude"],
+        "longitude": location["longitude"],
+    }
+
+
+async def geocode_courses_without_gps():
+    response = (
+        supabase
+        .table("courses")
+        .select("id,name")
+        .is_("latitude", "null")
+        .execute()
+    )
+
+    courses = response.data or []
+
+    geocoded = 0
+    failed = []
+
+    for course in courses:
+        try:
+            result = await find_course_by_name(course["name"])
+
+            if not result:
+                failed.append({
+                    "course_id": course["id"],
+                    "name": course["name"],
+                    "reason": "No match found",
+                })
+                continue
+
+            supabase.table("courses").update(result).eq("id", course["id"]).execute()
+            geocoded += 1
+
+        except Exception as exc:
+            failed.append({
+                "course_id": course["id"],
+                "name": course["name"],
+                "reason": str(exc),
+            })
+
+    return {"checked": len(courses), "geocoded": geocoded, "failed": failed}
+
+
 def find_existing_course(candidate):
     response = supabase.table("courses").select("*").execute()
 

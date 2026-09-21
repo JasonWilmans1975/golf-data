@@ -12,6 +12,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
+import ThemeToggle from "./ThemeToggle";
 
 type Course = {
     id: number;
@@ -76,9 +77,9 @@ function MapPage() {
         async function load() {
             try {
                 const response = await authFetch(`${API}/courses`);
-                const data = await response.json();
+                const data: Course[] = await response.json();
 
-                setCourses(data);
+                setCourses(data.filter((course) => course.rounds_played > 0));
             } finally {
                 setLoading(false);
             }
@@ -161,6 +162,8 @@ function MapPage() {
                     >
                         Settings
                     </button>
+
+                    <ThemeToggle />
                 </div>
             </header>
 

@@ -8,7 +8,7 @@ from .config import settings
 from .db import supabase
 from .auth import get_current_user_id, get_user_id_from_token
 from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities
-from .courses import detect_all_courses, get_courses_for_user, merge_courses
+from .courses import detect_all_courses, get_courses_for_user, merge_courses, geocode_courses_without_gps
 from .handicap import sync_handicap_data, save_credentials, has_credentials
 
 COURSE_PHOTOS_BUCKET = "course-photos"
@@ -139,6 +139,11 @@ def stats(user_id: str = Depends(get_current_user_id)):
 @app.post("/courses/detect")
 async def courses_detect(user_id: str = Depends(get_current_user_id)):
     return await detect_all_courses(user_id)
+
+
+@app.post("/courses/geocode")
+async def courses_geocode(user_id: str = Depends(get_current_user_id)):
+    return await geocode_courses_without_gps()
 
 
 @app.get("/courses")
