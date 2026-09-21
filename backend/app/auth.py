@@ -1,20 +1,36 @@
+import json
+
 import jwt
 from fastapi import Header, HTTPException
-from jwt import PyJWKClient
+from jwt.algorithms import ECAlgorithm
 
-from .config import settings
+# Supabase's public JWT signing key (ES256), from
+# <SUPABASE_URL>/auth/v1/.well-known/jwks.json. This is a PUBLIC key,
+# safe to embed. Fetching it at request time from Render was hitting a
+# persistent network error talking to Supabase's auth service, so it's
+# embedded statically instead. If Supabase ever rotates this signing
+# key, it needs to be refreshed from the JWKS endpoint above.
+_JWK = {
+    "alg": "ES256",
+    "crv": "P-256",
+    "ext": True,
+    "key_ops": ["verify"],
+    "kid": "fdc71a91-f54a-4af8-b2be-773ca1f5f3ba",
+    "kty": "EC",
+    "use": "sig",
+    "x": "psgnANbvXiyY1uNlVJDqvMFHTmJWsgAlwaMLygPYHN8",
+    "y": "oi7AlixYHurRnf7GFG1cA6cO2hmbSghZiMHF7kat3yQ",
+}
 
-_jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
-_jwks_client = PyJWKClient(_jwks_url)
+_PUBLIC_KEY = ECAlgorithm.from_jwk(json.dumps(_JWK))
 
 
 def _resolve_user(token: str) -> str:
     try:
-        signing_key = _jwks_client.get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token,
-            signing_key.key,
-            algorithms=["ES256", "RS256"],
+            _PUBLIC_KEY,
+            algorithms=["ES256"],
             audience="authenticated",
         )
     except Exception:
