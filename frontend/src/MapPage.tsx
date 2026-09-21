@@ -29,6 +29,12 @@ type Course = {
     photo_url: string | null;
 };
 
+type CountryPlayed = {
+    country_code: string;
+    country_name: string;
+    course_count: number;
+};
+
 function formatDate(value: string | null) {
     if (!value) return "—";
 
@@ -71,15 +77,21 @@ function MapPage() {
     const navigate = useNavigate();
 
     const [courses, setCourses] = useState<Course[]>([]);
+    const [countries, setCountries] = useState<CountryPlayed[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function load() {
             try {
-                const response = await authFetch(`${API}/courses`);
-                const data: Course[] = await response.json();
+                const [coursesRes, countriesRes] = await Promise.all([
+                    authFetch(`${API}/courses`),
+                    authFetch(`${API}/courses/countries`),
+                ]);
+
+                const data: Course[] = await coursesRes.json();
 
                 setCourses(data.filter((course) => course.rounds_played > 0));
+                setCountries(await countriesRes.json());
             } finally {
                 setLoading(false);
             }
@@ -192,6 +204,30 @@ function MapPage() {
                         </div>
                     </div>
                 </section>
+
+                {countries.length > 0 && (
+                    <div className="country-legend">
+                        {countries.map((country) => (
+                            <div
+                                className="country-legend-item"
+                                key={country.country_code}
+                                title={`${country.country_name} — ${country.course_count} ${
+                                    country.course_count === 1 ? "course" : "courses"
+                                }`}
+                            >
+                                <img
+                                    src={`https://flagcdn.com/24x18/${country.country_code}.png`}
+                                    alt={country.country_name}
+                                    className="country-flag"
+                                    onError={(event) => {
+                                        event.currentTarget.style.display = "none";
+                                    }}
+                                />
+                                <span>{country.country_name}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="loading-card">

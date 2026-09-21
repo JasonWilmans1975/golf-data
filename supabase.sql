@@ -104,3 +104,6 @@ create table if not exists public.handicap_credentials (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table if exists public.courses add column if not exists country_code text;
+alter table if exists public.courses add column if not exists country_name text;

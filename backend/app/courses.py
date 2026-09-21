@@ -136,7 +136,8 @@ async def find_course_by_name(name: str):
             "places.id,"
             "places.displayName,"
             "places.formattedAddress,"
-            "places.location"
+            "places.location,"
+            "places.addressComponents"
         ),
     }
 
@@ -166,11 +167,22 @@ async def find_course_by_name(name: str):
     if location.get("latitude") is None or location.get("longitude") is None:
         return None
 
+    country_code = None
+    country_name = None
+
+    for component in place.get("addressComponents", []):
+        if "country" in component.get("types", []):
+            country_code = (component.get("shortText") or "").lower() or None
+            country_name = component.get("longText")
+            break
+
     return {
         "google_place_id": place.get("id"),
         "formatted_address": place.get("formattedAddress"),
         "latitude": location["latitude"],
         "longitude": location["longitude"],
+        "country_code": country_code,
+        "country_name": country_name,
     }
 
 
@@ -211,6 +223,74 @@ async def geocode_courses_without_gps():
             })
 
     return {"checked": len(courses), "geocoded": geocoded, "failed": failed}
+
+
+async def backfill_country_info():
+    response = (
+        supabase
+        .table("courses")
+        .select("id,name")
+        .is_("country_code", "null")
+        .execute()
+    )
+
+    courses = response.data or []
+
+    updated = 0
+    failed = []
+
+    for course in courses:
+        try:
+            result = await find_course_by_name(course["name"])
+
+            if not result or not result.get("country_code"):
+                failed.append({
+                    "course_id": course["id"],
+                    "name": course["name"],
+                    "reason": "No country found",
+                })
+                continue
+
+            supabase.table("courses").update({
+                "country_code": result["country_code"],
+                "country_name": result["country_name"],
+            }).eq("id", course["id"]).execute()
+
+            updated += 1
+
+        except Exception as exc:
+            failed.append({
+                "course_id": course["id"],
+                "name": course["name"],
+                "reason": str(exc),
+            })
+
+    return {"checked": len(courses), "updated": updated, "failed": failed}
+
+
+def get_countries_played(user_id: str):
+    courses = get_courses_for_user(user_id)
+
+    countries = {}
+
+    for course in courses:
+        if course["rounds_played"] <= 0:
+            continue
+
+        code = course.get("country_code")
+
+        if not code:
+            continue
+
+        entry = countries.setdefault(code, {
+            "country_code": code,
+            "country_name": course.get("country_name") or code.upper(),
+            "course_count": 0,
+        })
+
+        entry["course_count"] += 1
+
+    return sorted(countries.values(), key=lambda c: c["country_name"])
 
 
 def find_existing_course(candidate):

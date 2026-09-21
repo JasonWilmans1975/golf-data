@@ -15,10 +15,39 @@
     --accent-bright: #ffd77a;
     --accent-soft: rgba(232, 184, 75, 0.14);
     --accent-glow: rgba(232, 184, 75, 0.35);
+    --accent-text: #14110a;
     --text: #f4f5f7;
     --text-muted: #8b93a1;
     --border: rgba(255, 255, 255, 0.08);
     --border-strong: rgba(255, 255, 255, 0.2);
+    --body-bg: #060708;
+    --body-glow: rgba(232, 184, 75, 0.08);
+    --body-glow-2: rgba(232, 184, 75, 0.05);
+    --error: #e0736a;
+}
+
+:root[data-theme="light"] {
+    color: #14141c;
+    background: #f4f5f7;
+
+    --ink: #1a1550;
+    --ink-soft: #241d66;
+    --panel: #ffffff;
+    --panel-2: #f4f4f6;
+    --accent: #e2231a;
+    --accent-dark: #b91c14;
+    --accent-bright: #ff4438;
+    --accent-soft: rgba(226, 35, 26, 0.08);
+    --accent-glow: rgba(226, 35, 26, 0.25);
+    --accent-text: #ffffff;
+    --text: #14141c;
+    --text-muted: #6b7280;
+    --border: rgba(20, 20, 30, 0.1);
+    --border-strong: rgba(20, 20, 30, 0.22);
+    --body-bg: #f4f5f7;
+    --body-glow: rgba(226, 35, 26, 0.05);
+    --body-glow-2: rgba(26, 21, 80, 0.04);
+    --error: #c62828;
 }
 
 * {
@@ -31,9 +60,9 @@ body {
     min-height: 100vh;
     color: var(--text);
     background:
-            radial-gradient(circle at top left, rgba(232, 184, 75, 0.08), transparent 34%),
-            radial-gradient(circle at 100% 0%, rgba(232, 184, 75, 0.05), transparent 40%),
-            #060708;
+            radial-gradient(circle at top left, var(--body-glow), transparent 34%),
+            radial-gradient(circle at 100% 0%, var(--body-glow-2), transparent 40%),
+            var(--body-bg);
 }
 
 button {
@@ -106,7 +135,7 @@ button {
 .sync-button {
     border: 0;
     background: var(--accent);
-    color: #14110a;
+    color: var(--accent-text);
     padding: 11px 20px;
     border-radius: 4px;
     font-weight: 800;
@@ -354,7 +383,7 @@ button {
 .view-button:hover {
     background: var(--accent);
     border-color: var(--accent);
-    color: #14110a;
+    color: var(--accent-text);
 }
 
 .merge-link {
@@ -586,6 +615,30 @@ button {
     font-size: 13px;
 }
 
+.country-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.country-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 12px 6px 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.country-legend-item .country-flag {
+    margin: 0;
+}
+
 .map-summary {
     display: flex;
     gap: 2px;
@@ -661,7 +714,7 @@ button {
 
 .course-popup button:hover {
     background: var(--accent);
-    color: #14110a;
+    color: var(--accent-text);
 }
 
 .map-course-list {
@@ -783,7 +836,7 @@ button {
     align-items: center;
     justify-content: center;
     background: var(--accent);
-    color: #14110a;
+    color: var(--accent-text);
     font-weight: 800;
     font-size: 16px;
 }
@@ -907,7 +960,7 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #060708;
+    background: var(--body-bg);
     padding: 20px;
 }
 
@@ -930,7 +983,7 @@ button {
 }
 
 .auth-error {
-    color: #e0736a;
+    color: var(--error);
     font-size: 13px;
     margin: 4px 0 0;
 }

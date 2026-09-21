@@ -8,7 +8,14 @@ from .config import settings
 from .db import supabase
 from .auth import get_current_user_id, get_user_id_from_token
 from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities
-from .courses import detect_all_courses, get_courses_for_user, merge_courses, geocode_courses_without_gps
+from .courses import (
+    detect_all_courses,
+    get_courses_for_user,
+    merge_courses,
+    geocode_courses_without_gps,
+    backfill_country_info,
+    get_countries_played,
+)
 from .handicap import sync_handicap_data, save_credentials, has_credentials
 
 COURSE_PHOTOS_BUCKET = "course-photos"
@@ -146,9 +153,19 @@ async def courses_geocode(user_id: str = Depends(get_current_user_id)):
     return await geocode_courses_without_gps()
 
 
+@app.post("/courses/backfill-countries")
+async def courses_backfill_countries(user_id: str = Depends(get_current_user_id)):
+    return await backfill_country_info()
+
+
 @app.get("/courses")
 def courses(user_id: str = Depends(get_current_user_id)):
     return get_courses_for_user(user_id)
+
+
+@app.get("/courses/countries")
+def courses_countries(user_id: str = Depends(get_current_user_id)):
+    return get_countries_played(user_id)
 
 
 @app.post("/courses/{course_id}/merge")
