@@ -333,7 +333,7 @@ async def backfill_course_details():
     response = (
         supabase
         .table("courses")
-        .select("id,name,google_place_id")
+        .select("id,name,google_place_id,latitude")
         .is_("details_fetched_at", "null")
         .execute()
     )
@@ -345,9 +345,16 @@ async def backfill_course_details():
 
     for course in courses:
         place_id = course.get("google_place_id")
+        # A course can have verified coordinates but no google_place_id on
+        # purpose (a sub-course at a resort whose Place ID is already owned
+        # by another course row -- see the except branch below). Re-running
+        # a name search in that case can land on a different, wrong place
+        # and clobber a manual fix, so only search by name when there's no
+        # location data to protect at all.
+        already_geocoded = course.get("latitude") is not None
 
         try:
-            if not place_id:
+            if not place_id and not already_geocoded:
                 match = await find_course_by_name(course["name"])
 
                 if match and match.get("google_place_id"):
@@ -374,7 +381,12 @@ async def backfill_course_details():
                 failed.append({
                     "course_id": course["id"],
                     "name": course["name"],
-                    "reason": "No Google Place match",
+                    "reason": (
+                        "Already geocoded manually with no Place ID to fetch "
+                        "details from"
+                        if already_geocoded
+                        else "No Google Place match"
+                    ),
                 })
                 continue
 

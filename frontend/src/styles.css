@@ -778,7 +778,20 @@ button {
     padding: 6px 12px 6px 8px;
     font-size: 12px;
     font-weight: 700;
+    font-family: inherit;
     color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.country-legend-item:hover {
+    border-color: var(--accent);
+}
+
+.country-legend-item.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-text);
 }
 
 .country-legend-item .country-flag {
@@ -1211,6 +1224,38 @@ button {
 }
 
 .granularity-toggle button.active {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+.map-layer-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+}
+
+.map-layer-toggle button {
+    background: var(--panel);
+    border: none;
+    padding: 8px 18px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-right: 1px solid var(--border);
+}
+
+.map-layer-toggle button:last-child {
+    border-right: none;
+}
+
+.map-layer-toggle button:hover {
+    color: var(--text);
+}
+
+.map-layer-toggle button.active {
     background: var(--accent);
     color: var(--accent-text);
 }

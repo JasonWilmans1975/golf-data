@@ -27,6 +27,7 @@ type Course = {
     last_played: string | null;
     formatted_address: string | null;
     photo_url: string | null;
+    country_code: string | null;
 };
 
 type CountryPlayed = {
@@ -45,7 +46,7 @@ function formatDate(value: string | null) {
     }).format(new Date(value));
 }
 
-function FitCourses({ courses }: { courses: Course[] }) {
+function FitCourses({ courses, maxZoom = 10 }: { courses: Course[]; maxZoom?: number }) {
     const map = useMap();
 
     useEffect(() => {
@@ -66,9 +67,9 @@ function FitCourses({ courses }: { courses: Course[] }) {
 
         map.fitBounds(bounds, {
             padding: [50, 50],
-            maxZoom: 10,
+            maxZoom,
         });
-    }, [courses, map]);
+    }, [courses, map, maxZoom]);
 
     return null;
 }
@@ -79,6 +80,8 @@ function MapPage() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [countries, setCountries] = useState<CountryPlayed[]>([]);
     const [loading, setLoading] = useState(true);
+    const [mapLayer, setMapLayer] = useState<"map" | "satellite">("map");
+    const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
 
     useEffect(() => {
         async function load() {
@@ -125,6 +128,20 @@ function MapPage() {
             ),
         [courses]
     );
+
+    const focusedCourses = useMemo(
+        () =>
+            selectedCountryCode
+                ? mappedCourses.filter(
+                      (course) => course.country_code === selectedCountryCode
+                  )
+                : mappedCourses,
+        [mappedCourses, selectedCountryCode]
+    );
+
+    function handleCountryClick(countryCode: string) {
+        setSelectedCountryCode((prev) => (prev === countryCode ? null : countryCode));
+    }
 
     const totalRounds = useMemo(
         () =>
@@ -220,9 +237,14 @@ function MapPage() {
                 {countries.length > 0 && (
                     <div className="country-legend">
                         {countries.map((country) => (
-                            <div
-                                className="country-legend-item"
+                            <button
+                                className={`country-legend-item${
+                                    selectedCountryCode === country.country_code
+                                        ? " active"
+                                        : ""
+                                }`}
                                 key={country.country_code}
+                                onClick={() => handleCountryClick(country.country_code)}
                                 title={`${country.country_name} — ${country.course_count} ${
                                     country.course_count === 1 ? "course" : "courses"
                                 }`}
@@ -236,8 +258,17 @@ function MapPage() {
                                     }}
                                 />
                                 <span>{country.country_name}</span>
-                            </div>
+                            </button>
                         ))}
+
+                        {selectedCountryCode && (
+                            <button
+                                className="course-count-clear"
+                                onClick={() => setSelectedCountryCode(null)}
+                            >
+                                Show all
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -246,6 +277,23 @@ function MapPage() {
                         Loading world map...
                     </div>
                 ) : (
+                    <>
+                        <div className="map-layer-toggle">
+                            <button
+                                className={mapLayer === "map" ? "active" : ""}
+                                onClick={() => setMapLayer("map")}
+                            >
+                                Map
+                            </button>
+
+                            <button
+                                className={mapLayer === "satellite" ? "active" : ""}
+                                onClick={() => setMapLayer("satellite")}
+                            >
+                                Satellite
+                            </button>
+                        </div>
+
                     <section className="world-map-card">
                         <MapContainer
                             center={[-20, 20]}
@@ -253,14 +301,26 @@ function MapPage() {
                             scrollWheelZoom={true}
                             className="world-map"
                         >
-                            <TileLayer
-                                attribution="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS"
-                                url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                            {mapLayer === "satellite" ? (
+                                <TileLayer
+                                    attribution="Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics"
+                                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                                />
+                            ) : (
+                                <>
+                                    <TileLayer
+                                        attribution="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS"
+                                        url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                                    />
+
+                                    <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" />
+                                </>
+                            )}
+
+                            <FitCourses
+                                courses={focusedCourses}
+                                maxZoom={selectedCountryCode ? 13 : 10}
                             />
-
-                            <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" />
-
-                            <FitCourses courses={mappedCourses} />
 
                             {mappedCourses.map((course) => (
                                 <Marker
@@ -323,6 +383,7 @@ function MapPage() {
                             ))}
                         </MapContainer>
                     </section>
+                    </>
                 )}
 
                 <section className="section-heading">

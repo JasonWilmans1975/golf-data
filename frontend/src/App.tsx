@@ -553,6 +553,7 @@ function CourseDetail() {
     const navigate = useNavigate();
 
     const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
+    const [mapLayer, setMapLayer] = useState<"map" | "satellite">("map");
 
     const [course, setCourse] =
         useState<Course | null>(null);
@@ -900,6 +901,22 @@ function CourseDetail() {
                             </span>
                         </section>
 
+                        <div className="map-layer-toggle">
+                            <button
+                                className={mapLayer === "map" ? "active" : ""}
+                                onClick={() => setMapLayer("map")}
+                            >
+                                Map
+                            </button>
+
+                            <button
+                                className={mapLayer === "satellite" ? "active" : ""}
+                                onClick={() => setMapLayer("satellite")}
+                            >
+                                Satellite
+                            </button>
+                        </div>
+
                         <section className="course-map-card">
                             <MapContainer
                                 center={mapCenter}
@@ -907,12 +924,21 @@ function CourseDetail() {
                                 scrollWheelZoom={true}
                                 className="course-map"
                             >
-                                <TileLayer
-                                    attribution="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS"
-                                    url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-                                />
+                                {mapLayer === "satellite" ? (
+                                    <TileLayer
+                                        attribution="Tiles &copy; Esri &mdash; Esri, Maxar, Earthstar Geographics"
+                                        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                                    />
+                                ) : (
+                                    <>
+                                        <TileLayer
+                                            attribution="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS"
+                                            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                                        />
 
-                                <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" />
+                                        <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" />
+                                    </>
+                                )}
 
                                 <Marker
                                     position={mapCenter}
