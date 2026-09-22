@@ -17,6 +17,8 @@ function SettingsPage() {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [handicapSyncing, setHandicapSyncing] = useState(false);
+    const [handicapSyncMessage, setHandicapSyncMessage] = useState<string | null>(null);
 
     const [garminEmail, setGarminEmail] = useState("");
     const [garminPassword, setGarminPassword] = useState("");
@@ -109,6 +111,7 @@ function SettingsPage() {
         setError(null);
         setSaving(true);
         setSaved(false);
+        setHandicapSyncMessage(null);
 
         try {
             const response = await authFetch(`${API}/handicap/credentials`, {
@@ -126,8 +129,34 @@ function SettingsPage() {
             setPassword("");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Something went wrong");
-        } finally {
             setSaving(false);
+            return;
+        }
+
+        setSaving(false);
+        setHandicapSyncing(true);
+
+        try {
+            const syncResponse = await authFetch(
+                `${API}/handicap/sync?force=true`,
+                { method: "POST" }
+            );
+
+            const body = await syncResponse.json().catch(() => null);
+
+            if (!syncResponse.ok) {
+                setHandicapSyncMessage(
+                    body?.detail || "Could not sync with handicaps.co.za"
+                );
+            } else if (body?.skipped) {
+                setHandicapSyncMessage("Already up to date.");
+            } else {
+                setHandicapSyncMessage(`Synced ${body.synced} rounds.`);
+            }
+        } catch (err) {
+            setHandicapSyncMessage("Could not reach the backend to sync");
+        } finally {
+            setHandicapSyncing(false);
         }
     }
 
@@ -372,20 +401,30 @@ function SettingsPage() {
                             </label>
 
                             {error && <p className="auth-error">{error}</p>}
-                            {saved && <p className="course-count">Saved.</p>}
+                            {saved && !handicapSyncing && !handicapSyncMessage && (
+                                <p className="course-count">Saved.</p>
+                            )}
 
                             <button
                                 className="sync-button"
                                 type="submit"
-                                disabled={saving}
+                                disabled={saving || handicapSyncing}
                                 style={{ marginTop: 12 }}
                             >
                                 {saving
                                     ? "Saving..."
+                                    : handicapSyncing
+                                    ? "Syncing..."
                                     : connected
                                     ? "Update credentials"
                                     : "Save credentials"}
                             </button>
+
+                            {handicapSyncMessage && (
+                                <p className="course-count" style={{ marginTop: 8 }}>
+                                    {handicapSyncMessage}
+                                </p>
+                            )}
                         </form>
                     </div>
 

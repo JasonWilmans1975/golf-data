@@ -252,7 +252,41 @@ function Dashboard() {
         if (new URLSearchParams(window.location.search).get("connected") === "1") {
             window.history.replaceState(null, "", "/");
             handleSync();
+            return;
         }
+
+        async function redirectFirstTimeUsers() {
+            try {
+                const [stravaRes, handicapRes, garminRes, teesheetRes] =
+                    await Promise.all([
+                        authFetch(`${API}/strava/status`),
+                        authFetch(`${API}/handicap/credentials/status`),
+                        authFetch(`${API}/garmin/credentials/status`),
+                        authFetch(`${API}/teesheet/credentials/status`),
+                    ]);
+
+                const [strava, handicap, garmin, teesheet] = await Promise.all([
+                    stravaRes.json().catch(() => ({})),
+                    handicapRes.json().catch(() => ({})),
+                    garminRes.json().catch(() => ({})),
+                    teesheetRes.json().catch(() => ({})),
+                ]);
+
+                const hasAnyConnection =
+                    strava.connected ||
+                    handicap.connected ||
+                    garmin.connected ||
+                    teesheet.connected;
+
+                if (!hasAnyConnection) {
+                    navigate("/settings", { replace: true });
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        redirectFirstTimeUsers();
     }, []);
 
     const totalRounds = useMemo(
