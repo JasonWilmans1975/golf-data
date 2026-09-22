@@ -58,7 +58,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "strava_redirect_uri": settings.strava_redirect_uri}
+    return {"ok": True}
 
 @app.get("/auth/strava")
 def auth_strava(token: str):
