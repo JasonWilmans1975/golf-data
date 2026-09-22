@@ -157,3 +157,15 @@ create table if not exists public.garmin_daily_stats (
   updated_at timestamptz default now(),
   primary key (user_id, stat_date)
 );
+
+-- teesheet.co.za support (tee times, account spending/balance)
+
+create table if not exists public.teesheet_credentials (
+  user_id uuid primary key,
+  club_id integer not null,
+  club_name text not null,
+  member_id text not null,
+  encrypted_password text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);

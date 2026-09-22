@@ -4,6 +4,7 @@ import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
+import { TEESHEET_CLUBS } from "./teesheetClubs";
 
 function SettingsPage() {
     const navigate = useNavigate();
@@ -29,6 +30,14 @@ function SettingsPage() {
 
     const [garminSyncing, setGarminSyncing] = useState(false);
     const [garminSyncMessage, setGarminSyncMessage] = useState<string | null>(null);
+
+    const [teesheetClubId, setTeesheetClubId] = useState("62");
+    const [teesheetMemberId, setTeesheetMemberId] = useState("");
+    const [teesheetPassword, setTeesheetPassword] = useState("");
+    const [teesheetConnected, setTeesheetConnected] = useState(false);
+    const [teesheetSaving, setTeesheetSaving] = useState(false);
+    const [teesheetSaved, setTeesheetSaved] = useState(false);
+    const [teesheetError, setTeesheetError] = useState<string | null>(null);
 
     useEffect(() => {
         async function load() {
@@ -64,6 +73,19 @@ function SettingsPage() {
                 if (response.ok) {
                     const body = await response.json();
                     setGarminConnected(body.connected);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
+            try {
+                const response = await authFetch(
+                    `${API}/teesheet/credentials/status`
+                );
+
+                if (response.ok) {
+                    const body = await response.json();
+                    setTeesheetConnected(body.connected);
                 }
             } catch (err) {
                 console.error(err);
@@ -138,6 +160,48 @@ function SettingsPage() {
             );
         } finally {
             setGarminSaving(false);
+        }
+    }
+
+    async function handleSaveTeesheetCredentials(event: FormEvent) {
+        event.preventDefault();
+        setTeesheetError(null);
+        setTeesheetSaving(true);
+        setTeesheetSaved(false);
+
+        const club = TEESHEET_CLUBS.find((c) => c.id === Number(teesheetClubId));
+
+        if (!club) {
+            setTeesheetError("Select your golf club");
+            setTeesheetSaving(false);
+            return;
+        }
+
+        try {
+            const response = await authFetch(`${API}/teesheet/credentials`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    club_id: club.id,
+                    club_name: club.name,
+                    member_id: teesheetMemberId,
+                    password: teesheetPassword,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to save credentials");
+            }
+
+            setTeesheetConnected(true);
+            setTeesheetSaved(true);
+            setTeesheetPassword("");
+        } catch (err) {
+            setTeesheetError(
+                err instanceof Error ? err.message : "Something went wrong"
+            );
+        } finally {
+            setTeesheetSaving(false);
         }
     }
 
@@ -402,6 +466,86 @@ function SettingsPage() {
                                 {garminSyncMessage}
                             </p>
                         )}
+                    </div>
+
+                    <div className="chart-card">
+                        <div className="chart-heading">
+                            <div>
+                                <p className="eyebrow">TEESHEET.CO.ZA</p>
+                                <h3>{teesheetConnected ? "Connected" : "Not Connected"}</h3>
+                            </div>
+                        </div>
+
+                        <p className="course-count">
+                            Connect teesheet.co.za to pull your tee times and
+                            account balance.
+                        </p>
+
+                        <form onSubmit={handleSaveTeesheetCredentials}>
+                            <label className="settings-label">
+                                Golf club
+                                <select
+                                    className="settings-input"
+                                    value={teesheetClubId}
+                                    onChange={(event) =>
+                                        setTeesheetClubId(event.target.value)
+                                    }
+                                    required
+                                >
+                                    <option value="">Select your club</option>
+                                    {TEESHEET_CLUBS.map((club) => (
+                                        <option key={club.id} value={club.id}>
+                                            {club.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+
+                            <label className="settings-label">
+                                Member ID
+                                <input
+                                    className="settings-input"
+                                    value={teesheetMemberId}
+                                    onChange={(event) =>
+                                        setTeesheetMemberId(event.target.value)
+                                    }
+                                    required
+                                />
+                            </label>
+
+                            <label className="settings-label">
+                                Password
+                                <input
+                                    className="settings-input"
+                                    type="password"
+                                    value={teesheetPassword}
+                                    onChange={(event) =>
+                                        setTeesheetPassword(event.target.value)
+                                    }
+                                    required
+                                />
+                            </label>
+
+                            {teesheetError && (
+                                <p className="auth-error">{teesheetError}</p>
+                            )}
+                            {teesheetSaved && (
+                                <p className="course-count">Saved.</p>
+                            )}
+
+                            <button
+                                className="sync-button"
+                                type="submit"
+                                disabled={teesheetSaving}
+                                style={{ marginTop: 12 }}
+                            >
+                                {teesheetSaving
+                                    ? "Saving..."
+                                    : teesheetConnected
+                                    ? "Update credentials"
+                                    : "Save credentials"}
+                            </button>
+                        </form>
                     </div>
 
                     <div className="chart-card">
