@@ -24,6 +24,10 @@ from .garmin import (
     save_credentials as save_garmin_credentials,
     has_credentials as has_garmin_credentials,
 )
+from .teesheet import (
+    save_credentials as save_teesheet_credentials,
+    has_credentials as has_teesheet_credentials,
+)
 
 COURSE_PHOTOS_BUCKET = "course-photos"
 
@@ -54,7 +58,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "strava_redirect_uri": settings.strava_redirect_uri}
 
 @app.get("/auth/strava")
 def auth_strava(token: str):
@@ -272,6 +276,29 @@ def garmin_wellness(days: int = 120, user_id: str = Depends(get_current_user_id)
     )
 
     return response.data
+
+
+class TeesheetCredentials(BaseModel):
+    club_id: int
+    club_name: str
+    member_id: str
+    password: str
+
+
+@app.post("/teesheet/credentials")
+def teesheet_credentials(
+    body: TeesheetCredentials,
+    user_id: str = Depends(get_current_user_id),
+):
+    save_teesheet_credentials(
+        user_id, body.club_id, body.club_name, body.member_id, body.password
+    )
+    return {"saved": True}
+
+
+@app.get("/teesheet/credentials/status")
+def teesheet_credentials_status(user_id: str = Depends(get_current_user_id)):
+    return {"connected": has_teesheet_credentials(user_id)}
 
 
 class HandicapCredentials(BaseModel):
