@@ -13,6 +13,7 @@ import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
 import ThemeToggle from "./ThemeToggle";
+import TopbarActions from "./TopbarActions";
 
 type Course = {
     id: number;
@@ -146,7 +147,7 @@ function MapPage() {
                     <h1>World Map</h1>
                 </div>
 
-                <div className="topbar-actions">
+                <TopbarActions>
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/")}
@@ -183,7 +184,7 @@ function MapPage() {
                     </button>
 
                     <ThemeToggle />
-                </div>
+                </TopbarActions>
             </header>
 
             <main className="content">

@@ -10,7 +10,7 @@ function getInitialTheme(): Theme {
         // ignore
     }
 
-    return "dark";
+    return "light";
 }
 
 export function useTheme() {

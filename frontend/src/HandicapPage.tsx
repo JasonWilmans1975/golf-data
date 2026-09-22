@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { API, authFetch } from "./api";
 import ThemeToggle from "./ThemeToggle";
+import TopbarActions from "./TopbarActions";
 import { useTheme } from "./useTheme";
 
 const CHART_PALETTES = {
@@ -195,7 +196,7 @@ function HandicapPage() {
                     <h1>Handicap</h1>
                 </div>
 
-                <div className="topbar-actions">
+                <TopbarActions>
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/")}
@@ -232,7 +233,7 @@ function HandicapPage() {
                     </button>
 
                     <ThemeToggle />
-                </div>
+                </TopbarActions>
             </header>
 
             <main className="content">

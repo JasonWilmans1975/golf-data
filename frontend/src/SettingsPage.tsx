@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 import ThemeToggle from "./ThemeToggle";
+import TopbarActions from "./TopbarActions";
 
 function SettingsPage() {
     const navigate = useNavigate();
@@ -134,7 +135,7 @@ function SettingsPage() {
                     <h1>Settings</h1>
                 </div>
 
-                <div className="topbar-actions">
+                <TopbarActions>
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/")}
@@ -154,7 +155,7 @@ function SettingsPage() {
                     </button>
 
                     <ThemeToggle />
-                </div>
+                </TopbarActions>
             </header>
 
             <main className="content">

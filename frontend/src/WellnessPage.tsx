@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { API, authFetch } from "./api";
 import ThemeToggle from "./ThemeToggle";
+import TopbarActions from "./TopbarActions";
 import { useTheme } from "./useTheme";
 
 const CHART_PALETTES = {
@@ -203,6 +204,7 @@ function WellnessPage() {
 
     const [days, setDays] = useState<DailyStat[]>([]);
     const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState<string | null>(null);
     const [justSynced, setJustSynced] = useState(false);
 
@@ -210,45 +212,49 @@ function WellnessPage() {
     const [customStart, setCustomStart] = useState("");
     const [customEnd, setCustomEnd] = useState("");
 
-    useEffect(() => {
-        async function load() {
-            setLoading(true);
-            setSyncError(null);
+    async function syncAndLoad(force: boolean) {
+        setSyncError(null);
 
-            try {
-                const syncResponse = await authFetch(`${API}/garmin/sync`, {
-                    method: "POST",
-                });
+        try {
+            const syncResponse = await authFetch(
+                `${API}/garmin/sync${force ? "?force=true" : ""}`,
+                { method: "POST" }
+            );
 
-                const body = await syncResponse.json().catch(() => null);
+            const body = await syncResponse.json().catch(() => null);
 
-                if (!syncResponse.ok) {
-                    setSyncError(
-                        body?.detail || "Could not sync with Garmin Connect"
-                    );
-                } else {
-                    setJustSynced(body?.skipped === false);
-                }
-            } catch (error) {
-                console.error(error);
-                setSyncError("Could not reach the backend to sync");
+            if (!syncResponse.ok) {
+                setSyncError(
+                    body?.detail || "Could not sync with Garmin Connect"
+                );
+            } else {
+                setJustSynced(body?.skipped === false);
             }
-
-            try {
-                const response = await authFetch(`${API}/garmin/wellness?days=120`);
-
-                if (response.ok) {
-                    setDays(await response.json());
-                }
-            } catch (error) {
-                console.error(error);
-            } finally {
-                setLoading(false);
-            }
+        } catch (error) {
+            console.error(error);
+            setSyncError("Could not reach the backend to sync");
         }
 
-        load();
+        try {
+            const response = await authFetch(`${API}/garmin/wellness?days=120`);
+
+            if (response.ok) {
+                setDays(await response.json());
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    useEffect(() => {
+        syncAndLoad(false).finally(() => setLoading(false));
     }, []);
+
+    async function handleRefresh() {
+        setSyncing(true);
+        await syncAndLoad(true);
+        setSyncing(false);
+    }
 
     useEffect(() => {
         if (days.length === 0 || customStart || customEnd) return;
@@ -295,7 +301,7 @@ function WellnessPage() {
                     <h1>Wellness</h1>
                 </div>
 
-                <div className="topbar-actions">
+                <TopbarActions>
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/")}
@@ -332,7 +338,15 @@ function WellnessPage() {
                     </button>
 
                     <ThemeToggle />
-                </div>
+
+                    <button
+                        className="sync-button"
+                        disabled={syncing}
+                        onClick={handleRefresh}
+                    >
+                        {syncing ? "Syncing..." : "Refresh data"}
+                    </button>
+                </TopbarActions>
             </header>
 
             <main className="content">
@@ -342,13 +356,13 @@ function WellnessPage() {
                     <h2>Your daily wellness.</h2>
 
                     <p>
-                        {loading
+                        {loading || syncing
                             ? "Loading your wellness data..."
                             : syncError
                             ? `Last sync failed: ${syncError}`
                             : justSynced
                             ? "Just synced the latest data from Garmin Connect."
-                            : "Up to date — this syncs with Garmin Connect once a day."}
+                            : "Up to date — this syncs with Garmin Connect once a day, or hit Refresh data for the latest."}
                     </p>
                 </section>
 

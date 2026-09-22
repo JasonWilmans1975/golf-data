@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { API, authFetch } from "./api";
 import ThemeToggle from "./ThemeToggle";
+import TopbarActions from "./TopbarActions";
 import { useTheme } from "./useTheme";
 
 const CHART_PALETTES = {
@@ -169,7 +170,7 @@ function StatsPage() {
                     <h1>Golf Statistics</h1>
                 </div>
 
-                <div className="topbar-actions">
+                <TopbarActions>
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/")}
@@ -206,7 +207,7 @@ function StatsPage() {
                     </button>
 
                     <ThemeToggle />
-                </div>
+                </TopbarActions>
             </header>
 
             <main className="content">

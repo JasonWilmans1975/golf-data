@@ -33,6 +33,7 @@ import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
 import ThemeToggle from "./ThemeToggle";
+import TopbarActions from "./TopbarActions";
 
 type Course = {
     id: number;
@@ -286,7 +287,7 @@ function Dashboard() {
                     <h1>Golf Journey</h1>
                 </div>
 
-                <div className="topbar-actions">
+                <TopbarActions>
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/map")}
@@ -339,7 +340,7 @@ function Dashboard() {
                     >
                         {garminSyncing ? "Syncing..." : "Sync Garmin"}
                     </button>
-                </div>
+                </TopbarActions>
             </header>
 
             {garminSyncError && (
@@ -551,6 +552,8 @@ function CourseDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
 
+    const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
+
     const [course, setCourse] =
         useState<Course | null>(null);
 
@@ -692,6 +695,14 @@ function CourseDetail() {
             );
     }, [activities]);
 
+    const visibleRoutes = useMemo(
+        () =>
+            selectedRoundId !== null
+                ? routeLines.filter((route) => route.id === selectedRoundId)
+                : routeLines,
+        [routeLines, selectedRoundId]
+    );
+
     const mapCenter: [number, number] =
         course?.latitude !== null &&
         course?.latitude !== undefined &&
@@ -730,7 +741,7 @@ function CourseDetail() {
                     <h1>{course.name}</h1>
                 </div>
 
-                <div className="topbar-actions">
+                <TopbarActions>
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/map")}
@@ -746,49 +757,52 @@ function CourseDetail() {
                     >
                         Back to courses
                     </button>
-                </div>
+                </TopbarActions>
             </header>
 
             <main className="content">
                 <section className="course-hero">
-                    <p className="eyebrow">
-                        COURSE HISTORY
-                    </p>
+                    <div className="course-hero-row">
+                        <div>
+                            <p className="eyebrow">
+                                COURSE HISTORY
+                            </p>
 
-                    <h2>{course.name}</h2>
+                            <h2>{course.name}</h2>
 
-                    <p>
-                        {course.formatted_address ||
-                            course.city ||
-                            course.country ||
-                            "Golf course"}
-                    </p>
+                            <p>
+                                {course.formatted_address ||
+                                    course.city ||
+                                    course.country ||
+                                    "Golf course"}
+                            </p>
 
-                    <label className="photo-upload photo-upload--on-dark">
-                        {course.photo_url ? "Change course photo" : "Add course photo"}
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(event) =>
-                                handlePhotoUpload(event.target.files?.[0])
-                            }
-                        />
-                    </label>
-                </section>
+                            <label className="photo-upload photo-upload--on-dark">
+                                {course.photo_url ? "Change course photo" : "Add course photo"}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(event) =>
+                                        handlePhotoUpload(event.target.files?.[0])
+                                    }
+                                />
+                            </label>
+                        </div>
 
-                {(course.google_photo_url ||
-                    course.description ||
-                    course.website_url ||
-                    course.phone_number) && (
-                    <section className="course-info-card">
                         {course.google_photo_url && !course.photo_url && (
                             <img
-                                className="course-info-photo"
+                                className="course-hero-photo"
                                 src={course.google_photo_url}
                                 alt={course.name}
                             />
                         )}
+                    </div>
+                </section>
 
+                {(course.description ||
+                    course.website_url ||
+                    course.phone_number) && (
+                    <section className="course-info-card">
                         <div className="course-info-details">
                             {course.description && (
                                 <p className="course-info-description">
@@ -867,8 +881,18 @@ function CourseDetail() {
                     </div>
 
                     <span className="course-count">
-            {routeLines.length} GPS routes
-          </span>
+                        {selectedRoundId !== null
+                            ? "1 GPS route selected"
+                            : `${routeLines.length} GPS routes`}
+                        {selectedRoundId !== null && (
+                            <button
+                                className="course-count-clear"
+                                onClick={() => setSelectedRoundId(null)}
+                            >
+                                Show all
+                            </button>
+                        )}
+                    </span>
                 </section>
 
                 <section className="course-map-card">
@@ -891,12 +915,12 @@ function CourseDetail() {
                         />
 
                         <FitRouteBounds
-                            routes={routeLines.map(
+                            routes={visibleRoutes.map(
                                 (route) => route.positions
                             )}
                         />
 
-                        {routeLines.map(
+                        {visibleRoutes.map(
                             (route, index) => (
                                 <Polyline
                                     key={route.id}
@@ -904,11 +928,13 @@ function CourseDetail() {
                                         route.positions
                                     }
                                     weight={
-                                        index === 0
+                                        selectedRoundId !== null || index === 0
                                             ? 4
                                             : 3
                                     }
-                                    opacity={0.65}
+                                    opacity={
+                                        selectedRoundId !== null ? 0.9 : 0.65
+                                    }
                                 />
                             )
                         )}
@@ -961,10 +987,25 @@ function CourseDetail() {
                                     a.start_date
                                 ).getTime()
                         )
-                        .map((round) => (
+                        .map((round) => {
+                            const hasRoute = Boolean(
+                                round.map_polyline && round.map_polyline.length > 0
+                            );
+
+                            return (
                             <div
-                                className="round-row"
+                                className={`round-row${hasRoute ? " round-row-clickable" : ""}${
+                                    selectedRoundId === round.id ? " active" : ""
+                                }`}
                                 key={round.id}
+                                onClick={
+                                    hasRoute
+                                        ? () =>
+                                              setSelectedRoundId((prev) =>
+                                                  prev === round.id ? null : round.id
+                                              )
+                                        : undefined
+                                }
                             >
                                 <div>
                                     <strong>
@@ -1011,7 +1052,8 @@ function CourseDetail() {
                                     <span>Elevation</span>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                 </div>
             </main>
         </>
