@@ -40,6 +40,8 @@ function SettingsPage() {
     const [teesheetSaving, setTeesheetSaving] = useState(false);
     const [teesheetSaved, setTeesheetSaved] = useState(false);
     const [teesheetError, setTeesheetError] = useState<string | null>(null);
+    const [teesheetSyncing, setTeesheetSyncing] = useState(false);
+    const [teesheetSyncMessage, setTeesheetSyncMessage] = useState<string | null>(null);
 
     useEffect(() => {
         async function load() {
@@ -192,11 +194,40 @@ function SettingsPage() {
         }
     }
 
+    async function handleSyncTeesheet(force: boolean) {
+        setTeesheetSyncing(true);
+        setTeesheetSyncMessage(null);
+
+        try {
+            const response = await authFetch(
+                `${API}/teesheet/sync${force ? "?force=true" : ""}`,
+                { method: "POST" }
+            );
+
+            const body = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                setTeesheetSyncMessage(body?.detail || "Sync failed");
+            } else if (body?.skipped) {
+                setTeesheetSyncMessage("Already up to date.");
+            } else {
+                setTeesheetSyncMessage(
+                    `Synced ${body.bookings_synced} booking(s), ${body.transactions_synced} transaction(s).`
+                );
+            }
+        } catch (err) {
+            setTeesheetSyncMessage("Could not reach the backend to sync");
+        } finally {
+            setTeesheetSyncing(false);
+        }
+    }
+
     async function handleSaveTeesheetCredentials(event: FormEvent) {
         event.preventDefault();
         setTeesheetError(null);
         setTeesheetSaving(true);
         setTeesheetSaved(false);
+        setTeesheetSyncMessage(null);
 
         const club = TEESHEET_CLUBS.find((c) => c.id === Number(teesheetClubId));
 
@@ -229,9 +260,12 @@ function SettingsPage() {
             setTeesheetError(
                 err instanceof Error ? err.message : "Something went wrong"
             );
-        } finally {
             setTeesheetSaving(false);
+            return;
         }
+
+        setTeesheetSaving(false);
+        await handleSyncTeesheet(true);
     }
 
     async function handleSyncStrava() {
@@ -310,6 +344,13 @@ function SettingsPage() {
                         onClick={() => navigate("/wellness")}
                     >
                         Wellness
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/teesheet")}
+                    >
+                        Teesheet
                     </button>
 
                     <button className="header-secondary-button" onClick={handleLogout}>
@@ -568,23 +609,40 @@ function SettingsPage() {
                             {teesheetError && (
                                 <p className="auth-error">{teesheetError}</p>
                             )}
-                            {teesheetSaved && (
+                            {teesheetSaved && !teesheetSyncing && !teesheetSyncMessage && (
                                 <p className="course-count">Saved.</p>
                             )}
 
                             <button
                                 className="sync-button"
                                 type="submit"
-                                disabled={teesheetSaving}
+                                disabled={teesheetSaving || teesheetSyncing}
                                 style={{ marginTop: 12 }}
                             >
                                 {teesheetSaving
                                     ? "Saving..."
+                                    : teesheetSyncing
+                                    ? "Syncing..."
                                     : teesheetConnected
                                     ? "Update credentials"
                                     : "Save credentials"}
                             </button>
                         </form>
+
+                        <button
+                            className="sync-button"
+                            onClick={() => handleSyncTeesheet(true)}
+                            disabled={teesheetSyncing || teesheetSaving}
+                            style={{ marginTop: 8 }}
+                        >
+                            {teesheetSyncing ? "Syncing..." : "Sync now"}
+                        </button>
+
+                        {teesheetSyncMessage && (
+                            <p className="course-count" style={{ marginTop: 8 }}>
+                                {teesheetSyncMessage}
+                            </p>
+                        )}
                     </div>
 
                     <div className="chart-card">

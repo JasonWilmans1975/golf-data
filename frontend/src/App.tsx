@@ -13,6 +13,7 @@ import StatsPage from "./StatsPage";
 import MapPage from "./MapPage";
 import HandicapPage from "./HandicapPage";
 import WellnessPage from "./WellnessPage";
+import TeesheetPage from "./TeesheetPage";
 import LoginPage from "./LoginPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -336,6 +337,13 @@ function Dashboard() {
                         onClick={() => navigate("/wellness")}
                     >
                         Wellness
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/teesheet")}
+                    >
+                        Teesheet
                     </button>
 
                     <button
@@ -1099,6 +1107,15 @@ function AppRoutes() {
                 element={
                     <RequireAuth>
                         <WellnessPage />
+                    </RequireAuth>
+                }
+            />
+
+            <Route
+                path="/teesheet"
+                element={
+                    <RequireAuth>
+                        <TeesheetPage />
                     </RequireAuth>
                 }
             />

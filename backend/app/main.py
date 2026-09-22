@@ -27,6 +27,7 @@ from .garmin import (
 from .teesheet import (
     save_credentials as save_teesheet_credentials,
     has_credentials as has_teesheet_credentials,
+    sync_teesheet_data,
 )
 
 COURSE_PHOTOS_BUCKET = "course-photos"
@@ -299,6 +300,60 @@ def teesheet_credentials(
 @app.get("/teesheet/credentials/status")
 def teesheet_credentials_status(user_id: str = Depends(get_current_user_id)):
     return {"connected": has_teesheet_credentials(user_id)}
+
+
+@app.post("/teesheet/sync")
+async def teesheet_sync(force: bool = False, user_id: str = Depends(get_current_user_id)):
+    try:
+        return await sync_teesheet_data(user_id, force=force)
+    except RuntimeError as exc:
+        raise HTTPException(502, detail=str(exc))
+
+
+@app.get("/teesheet/bookings")
+def teesheet_bookings(user_id: str = Depends(get_current_user_id)):
+    response = (
+        supabase
+        .table("teesheet_bookings")
+        .select("*")
+        .eq("user_id", user_id)
+        .gte("play_date", datetime.now(timezone.utc).date().isoformat())
+        .order("play_date")
+        .execute()
+    )
+
+    return response.data
+
+
+@app.get("/teesheet/transactions")
+def teesheet_transactions(limit: int = 50, user_id: str = Depends(get_current_user_id)):
+    response = (
+        supabase
+        .table("teesheet_transactions")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("transaction_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    return response.data
+
+
+@app.get("/teesheet/balance")
+def teesheet_balance(user_id: str = Depends(get_current_user_id)):
+    response = (
+        supabase
+        .table("teesheet_sync_state")
+        .select("current_balance,last_synced_at")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if not response.data:
+        return {"current_balance": None, "last_synced_at": None}
+
+    return response.data[0]
 
 
 class HandicapCredentials(BaseModel):

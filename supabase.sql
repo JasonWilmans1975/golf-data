@@ -169,3 +169,35 @@ create table if not exists public.teesheet_credentials (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+create table if not exists public.teesheet_sync_state (
+  user_id uuid primary key,
+  last_synced_at timestamptz,
+  current_balance numeric
+);
+
+create table if not exists public.teesheet_bookings (
+  id bigint generated always as identity primary key,
+  user_id uuid not null,
+  booking_id bigint,
+  play_date date not null,
+  play_time text,
+  tee text,
+  course_name text,
+  players jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (user_id, play_date, play_time, course_name)
+);
+
+create table if not exists public.teesheet_transactions (
+  id bigint generated always as identity primary key,
+  user_id uuid not null,
+  doc_number text not null,
+  transaction_at timestamptz,
+  description text,
+  credit numeric default 0,
+  debit numeric default 0,
+  created_at timestamptz default now(),
+  unique (user_id, doc_number)
+);

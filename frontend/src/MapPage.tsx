@@ -177,6 +177,13 @@ function MapPage() {
 
                     <button
                         className="header-secondary-button"
+                        onClick={() => navigate("/teesheet")}
+                    >
+                        Teesheet
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
                         onClick={() => navigate("/settings")}
                     >
                         Settings

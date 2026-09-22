@@ -9,3 +9,4 @@ playwright==1.55.0
 cryptography==50.0.1
 PyJWT==2.14.0
 garminconnect==0.3.16
+beautifulsoup4==4.15.0
