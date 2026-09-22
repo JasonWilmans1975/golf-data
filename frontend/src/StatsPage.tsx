@@ -12,7 +12,6 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import { API, authFetch } from "./api";
-import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
 import { useTheme } from "./useTheme";
 
@@ -205,8 +204,6 @@ function StatsPage() {
                     >
                         Settings
                     </button>
-
-                    <ThemeToggle />
                 </TopbarActions>
             </header>
 

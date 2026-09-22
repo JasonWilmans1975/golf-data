@@ -14,7 +14,6 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import { API, authFetch } from "./api";
-import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
 import { useTheme } from "./useTheme";
 
@@ -204,7 +203,6 @@ function WellnessPage() {
 
     const [days, setDays] = useState<DailyStat[]>([]);
     const [loading, setLoading] = useState(true);
-    const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState<string | null>(null);
     const [justSynced, setJustSynced] = useState(false);
 
@@ -249,12 +247,6 @@ function WellnessPage() {
     useEffect(() => {
         syncAndLoad(false).finally(() => setLoading(false));
     }, []);
-
-    async function handleRefresh() {
-        setSyncing(true);
-        await syncAndLoad(true);
-        setSyncing(false);
-    }
 
     useEffect(() => {
         if (days.length === 0 || customStart || customEnd) return;
@@ -336,16 +328,6 @@ function WellnessPage() {
                     >
                         Settings
                     </button>
-
-                    <ThemeToggle />
-
-                    <button
-                        className="sync-button"
-                        disabled={syncing}
-                        onClick={handleRefresh}
-                    >
-                        {syncing ? "Syncing..." : "Refresh data"}
-                    </button>
                 </TopbarActions>
             </header>
 
@@ -356,13 +338,13 @@ function WellnessPage() {
                     <h2>Your daily wellness.</h2>
 
                     <p>
-                        {loading || syncing
+                        {loading
                             ? "Loading your wellness data..."
                             : syncError
                             ? `Last sync failed: ${syncError}`
                             : justSynced
                             ? "Just synced the latest data from Garmin Connect."
-                            : "Up to date — this syncs with Garmin Connect once a day, or hit Refresh data for the latest."}
+                            : "Up to date — this syncs with Garmin Connect once a day, or sync now from Settings."}
                     </p>
                 </section>
 

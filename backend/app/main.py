@@ -80,6 +80,17 @@ async def auth_callback(code: str | None = None, error: str | None = None, state
     supabase.table("strava_tokens").upsert(row, on_conflict="athlete_id").execute()
     return RedirectResponse(f"{settings.app_url}/?connected=1")
 
+@app.get("/strava/status")
+def strava_status(user_id: str = Depends(get_current_user_id)):
+    token_resp = (
+        supabase.table("strava_tokens")
+        .select("athlete_id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    return {"connected": bool(token_resp.data)}
+
 @app.post("/sync")
 async def sync(user_id: str = Depends(get_current_user_id)):
     token_resp = (

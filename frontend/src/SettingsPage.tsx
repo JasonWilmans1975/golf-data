@@ -8,6 +8,8 @@ import TopbarActions from "./TopbarActions";
 function SettingsPage() {
     const navigate = useNavigate();
 
+    const [stravaConnected, setStravaConnected] = useState(false);
+
     const [memberNo, setMemberNo] = useState("");
     const [password, setPassword] = useState("");
     const [connected, setConnected] = useState(false);
@@ -22,8 +24,25 @@ function SettingsPage() {
     const [garminSaved, setGarminSaved] = useState(false);
     const [garminError, setGarminError] = useState<string | null>(null);
 
+    const [stravaSyncing, setStravaSyncing] = useState(false);
+    const [stravaSyncMessage, setStravaSyncMessage] = useState<string | null>(null);
+
+    const [garminSyncing, setGarminSyncing] = useState(false);
+    const [garminSyncMessage, setGarminSyncMessage] = useState<string | null>(null);
+
     useEffect(() => {
         async function load() {
+            try {
+                const response = await authFetch(`${API}/strava/status`);
+
+                if (response.ok) {
+                    const body = await response.json();
+                    setStravaConnected(body.connected);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+
             try {
                 const response = await authFetch(
                     `${API}/handicap/credentials/status`
@@ -122,6 +141,56 @@ function SettingsPage() {
         }
     }
 
+    async function handleSyncStrava() {
+        setStravaSyncing(true);
+        setStravaSyncMessage(null);
+
+        try {
+            const response = await authFetch(`${API}/sync`, { method: "POST" });
+
+            if (response.status === 401) {
+                setStravaSyncMessage("Connect Strava first.");
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error("Failed to sync Strava activities");
+            }
+
+            await authFetch(`${API}/courses/detect`, { method: "POST" });
+            setStravaSyncMessage("Synced.");
+        } catch (err) {
+            setStravaSyncMessage("Sync failed.");
+        } finally {
+            setStravaSyncing(false);
+        }
+    }
+
+    async function handleSyncGarmin() {
+        setGarminSyncing(true);
+        setGarminSyncMessage(null);
+
+        try {
+            const response = await authFetch(`${API}/garmin/sync?force=true`, {
+                method: "POST",
+            });
+
+            const body = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                setGarminSyncMessage(body?.detail || "Garmin sync failed");
+                return;
+            }
+
+            await authFetch(`${API}/courses/detect`, { method: "POST" });
+            setGarminSyncMessage("Synced.");
+        } catch (err) {
+            setGarminSyncMessage("Could not reach the backend to sync");
+        } finally {
+            setGarminSyncing(false);
+        }
+    }
+
     async function handleLogout() {
         await supabase.auth.signOut();
         navigate("/login");
@@ -153,8 +222,6 @@ function SettingsPage() {
                     <button className="header-secondary-button" onClick={handleLogout}>
                         Log out
                     </button>
-
-                    <ThemeToggle />
                 </TopbarActions>
             </header>
 
@@ -173,7 +240,7 @@ function SettingsPage() {
                         <div className="chart-heading">
                             <div>
                                 <p className="eyebrow">STRAVA</p>
-                                <h3>GPS &amp; Rounds</h3>
+                                <h3>{stravaConnected ? "Connected" : "Not Connected"}</h3>
                             </div>
                         </div>
 
@@ -189,6 +256,21 @@ function SettingsPage() {
                         >
                             Connect Strava
                         </button>
+
+                        <button
+                            className="sync-button"
+                            onClick={handleSyncStrava}
+                            disabled={stravaSyncing}
+                            style={{ marginTop: 8, marginLeft: 8 }}
+                        >
+                            {stravaSyncing ? "Syncing..." : "Sync now"}
+                        </button>
+
+                        {stravaSyncMessage && (
+                            <p className="course-count" style={{ marginTop: 8 }}>
+                                {stravaSyncMessage}
+                            </p>
+                        )}
                     </div>
 
                     <div className="chart-card">
@@ -305,6 +387,32 @@ function SettingsPage() {
                                     : "Save credentials"}
                             </button>
                         </form>
+
+                        <button
+                            className="sync-button"
+                            onClick={handleSyncGarmin}
+                            disabled={garminSyncing}
+                            style={{ marginTop: 8 }}
+                        >
+                            {garminSyncing ? "Syncing..." : "Sync now"}
+                        </button>
+
+                        {garminSyncMessage && (
+                            <p className="course-count" style={{ marginTop: 8 }}>
+                                {garminSyncMessage}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="chart-card">
+                        <div className="chart-heading">
+                            <div>
+                                <p className="eyebrow">APPEARANCE</p>
+                                <h3>Theme</h3>
+                            </div>
+                        </div>
+
+                        <ThemeToggle />
                     </div>
                 </section>
             </main>

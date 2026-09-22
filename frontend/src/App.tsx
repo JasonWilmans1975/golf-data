@@ -32,7 +32,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
-import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
 
 type Course = {
@@ -75,6 +74,16 @@ type Stats = {
     total_moving_hours?: number;
 };
 
+type Score = {
+    id: number;
+    score_id: number;
+    play_date: string;
+    handicap_index: number | null;
+    adjusted_gross: number | null;
+    stableford_points: number | null;
+    course_id: number | null;
+};
+
 function formatDate(value: string | null) {
     if (!value) return "—";
 
@@ -83,15 +92,6 @@ function formatDate(value: string | null) {
         month: "short",
         year: "numeric",
     }).format(new Date(value));
-}
-
-function formatDuration(seconds: number) {
-    if (!seconds) return "—";
-
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.round((seconds % 3600) / 60);
-
-    return `${hours}h ${mins}m`;
 }
 
 function FitRouteBounds({
@@ -122,10 +122,10 @@ function Dashboard() {
 
     const [courses, setCourses] = useState<Course[]>([]);
     const [stats, setStats] = useState<Stats>({});
+    const [currentHandicap, setCurrentHandicap] = useState<number | null>(null);
+    const [todaySteps, setTodaySteps] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [syncing, setSyncing] = useState(false);
-    const [garminSyncing, setGarminSyncing] = useState(false);
-    const [garminSyncError, setGarminSyncError] = useState<string | null>(null);
     const [mergingCourseId, setMergingCourseId] = useState<number | null>(null);
 
     async function handleMerge(sourceId: number, targetId: number) {
@@ -179,6 +179,25 @@ function Dashboard() {
         } finally {
             setLoading(false);
         }
+
+        try {
+            const [handicapRes, wellnessRes] = await Promise.all([
+                authFetch(`${API}/handicap/current`),
+                authFetch(`${API}/garmin/wellness?days=1`),
+            ]);
+
+            if (handicapRes.ok) {
+                const body = await handicapRes.json();
+                setCurrentHandicap(body?.current_handicap_index ?? null);
+            }
+
+            if (wellnessRes.ok) {
+                const days: { total_steps: number | null }[] = await wellnessRes.json();
+                setTodaySteps(days.length > 0 ? days[days.length - 1].total_steps : null);
+            }
+        } catch (error) {
+            console.error(error);
+        }
     }
 
     async function handleSync() {
@@ -210,37 +229,6 @@ function Dashboard() {
             console.error(error);
         } finally {
             setSyncing(false);
-        }
-    }
-
-    async function handleGarminSync() {
-        setGarminSyncing(true);
-        setGarminSyncError(null);
-
-        try {
-            const response = await authFetch(`${API}/garmin/sync`, {
-                method: "POST",
-            });
-
-            if (response.status === 502) {
-                const body = await response.json().catch(() => null);
-                setGarminSyncError(
-                    body?.detail ||
-                        "Garmin sync failed — check your credentials in Settings"
-                );
-                return;
-            }
-
-            if (!response.ok) {
-                throw new Error("Failed to sync Garmin activities");
-            }
-
-            await detectCourses();
-            await loadDashboard();
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setGarminSyncing(false);
         }
     }
 
@@ -322,32 +310,8 @@ function Dashboard() {
                     >
                         Settings
                     </button>
-
-                    <ThemeToggle />
-
-                    <button
-                        className="sync-button"
-                        disabled={syncing}
-                        onClick={handleSync}
-                    >
-                        {syncing ? "Syncing..." : "Sync Strava"}
-                    </button>
-
-                    <button
-                        className="sync-button"
-                        disabled={garminSyncing}
-                        onClick={handleGarminSync}
-                    >
-                        {garminSyncing ? "Syncing..." : "Sync Garmin"}
-                    </button>
                 </TopbarActions>
             </header>
-
-            {garminSyncError && (
-                <p className="auth-error" style={{ margin: "12px 48px 0" }}>
-                    {garminSyncError}
-                </p>
-            )}
 
             <main className="content">
                 <section className="hero">
@@ -379,25 +343,19 @@ function Dashboard() {
                     </div>
 
                     <div className="stat-card">
-                        <span>Distance walked</span>
+                        <span>Handicap index</span>
 
                         <strong>
-                            {stats.total_distance_km
-                                ? `${stats.total_distance_km.toFixed(
-                                    1
-                                )} km`
-                                : "—"}
+                            {currentHandicap ?? "—"}
                         </strong>
                     </div>
 
                     <div className="stat-card">
-                        <span>Elevation</span>
+                        <span>Daily steps</span>
 
                         <strong>
-                            {stats.total_elevation_m
-                                ? `${Math.round(
-                                    stats.total_elevation_m
-                                )} m`
+                            {todaySteps != null
+                                ? todaySteps.toLocaleString()
                                 : "—"}
                         </strong>
                     </div>
@@ -483,7 +441,7 @@ function Dashboard() {
                                             )
                                         }
                                     >
-                                        View course
+                                        View round details
                                     </button>
 
                                     {mergingCourseId === course.id ? (
@@ -560,15 +518,18 @@ function CourseDetail() {
     const [activities, setActivities] =
         useState<Activity[]>([]);
 
+    const [scores, setScores] = useState<Score[]>([]);
+
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function load() {
             try {
-                const [coursesRes, activitiesRes] =
+                const [coursesRes, activitiesRes, scoresRes] =
                     await Promise.all([
                         authFetch(`${API}/courses`),
                         authFetch(`${API}/activities`),
+                        authFetch(`${API}/handicap/scores?limit=5000`),
                     ]);
 
                 if (!coursesRes.ok) {
@@ -603,6 +564,16 @@ function CourseDetail() {
                             activity.course_id === Number(id)
                     )
                 );
+
+                if (scoresRes.ok) {
+                    const scoresData: Score[] = await scoresRes.json();
+
+                    setScores(
+                        scoresData.filter(
+                            (score) => score.course_id === Number(id)
+                        )
+                    );
+                }
             } catch (error) {
                 console.error(error);
             } finally {
@@ -630,30 +601,6 @@ function CourseDetail() {
             sum + (activity.distance_m || 0),
         0
     );
-
-    const totalElevation = activities.reduce(
-        (sum, activity) =>
-            sum +
-            (activity.elevation_gain_m || 0),
-        0
-    );
-
-    const avgMovingTime =
-        activities.length > 0
-            ? activities.reduce(
-            (sum, activity) =>
-                sum +
-                (activity.moving_time_s || 0),
-            0
-        ) / activities.length
-            : 0;
-
-    const avgDistance =
-        activities.length > 0
-            ? totalDistance /
-            activities.length /
-            1000
-            : 0;
 
     const routeLines = useMemo(() => {
         return activities
@@ -703,6 +650,22 @@ function CourseDetail() {
         [routeLines, selectedRoundId]
     );
 
+    // Scores (handicaps.co.za) and activities (Strava/Garmin GPS) are
+    // separate data sources joined only by course, not by a shared per-round
+    // key — match by same calendar day so a round with GPS data can still
+    // highlight its route when clicked.
+    const activityByDate = useMemo(() => {
+        const map = new Map<string, Activity>();
+
+        for (const activity of activities) {
+            const day = new Date(activity.start_date).toDateString();
+
+            if (!map.has(day)) map.set(day, activity);
+        }
+
+        return map;
+    }, [activities]);
+
     const mapCenter: [number, number] =
         course?.latitude !== null &&
         course?.latitude !== undefined &&
@@ -749,13 +712,11 @@ function CourseDetail() {
                         World Map
                     </button>
 
-                    <ThemeToggle />
-
                     <button
                         className="sync-button"
                         onClick={() => navigate("/")}
                     >
-                        Back to courses
+                        Home
                     </button>
                 </TopbarActions>
             </header>
@@ -835,7 +796,7 @@ function CourseDetail() {
                     <div className="stat-card">
                         <span>Rounds</span>
                         <strong>
-                            {activities.length}
+                            {course.rounds_played}
                         </strong>
                     </div>
 
@@ -851,111 +812,6 @@ function CourseDetail() {
                     </div>
 
                     <div className="stat-card">
-                        <span>Average distance</span>
-
-                        <strong>
-                            {avgDistance.toFixed(1)} km
-                        </strong>
-                    </div>
-
-                    <div className="stat-card">
-            <span>
-              Average moving time
-            </span>
-
-                        <strong>
-                            {formatDuration(
-                                avgMovingTime
-                            )}
-                        </strong>
-                    </div>
-                </section>
-
-                <section className="section-heading">
-                    <div>
-                        <p className="eyebrow">
-                            GPS HISTORY
-                        </p>
-
-                        <h3>Rounds on the course</h3>
-                    </div>
-
-                    <span className="course-count">
-                        {selectedRoundId !== null
-                            ? "1 GPS route selected"
-                            : `${routeLines.length} GPS routes`}
-                        {selectedRoundId !== null && (
-                            <button
-                                className="course-count-clear"
-                                onClick={() => setSelectedRoundId(null)}
-                            >
-                                Show all
-                            </button>
-                        )}
-                    </span>
-                </section>
-
-                <section className="course-map-card">
-                    <MapContainer
-                        center={mapCenter}
-                        zoom={15}
-                        scrollWheelZoom={true}
-                        className="course-map"
-                    >
-                        <TileLayer
-                            attribution="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS"
-                            url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-                        />
-
-                        <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" />
-
-                        <Marker
-                            position={mapCenter}
-                            icon={courseMarkerIcon(course)}
-                        />
-
-                        <FitRouteBounds
-                            routes={visibleRoutes.map(
-                                (route) => route.positions
-                            )}
-                        />
-
-                        {visibleRoutes.map(
-                            (route, index) => (
-                                <Polyline
-                                    key={route.id}
-                                    positions={
-                                        route.positions
-                                    }
-                                    weight={
-                                        selectedRoundId !== null || index === 0
-                                            ? 4
-                                            : 3
-                                    }
-                                    opacity={
-                                        selectedRoundId !== null ? 0.9 : 0.65
-                                    }
-                                />
-                            )
-                        )}
-                    </MapContainer>
-                </section>
-
-                <section className="stats-summary">
-                    <div>
-            <span>
-              Total elevation climbed
-            </span>
-
-                        <strong>
-                            {Math.round(
-                                totalElevation
-                            ).toLocaleString()}{" "}
-                            m
-                        </strong>
-                    </div>
-
-                    <div>
                         <span>First played</span>
 
                         <strong>
@@ -964,7 +820,91 @@ function CourseDetail() {
                             )}
                         </strong>
                     </div>
+
+                    <div className="stat-card">
+                        <span>Last played</span>
+
+                        <strong>
+                            {formatDate(
+                                course.last_played
+                            )}
+                        </strong>
+                    </div>
                 </section>
+
+                {routeLines.length > 0 && (
+                    <>
+                        <section className="section-heading">
+                            <div>
+                                <p className="eyebrow">
+                                    GPS HISTORY
+                                </p>
+
+                                <h3>Rounds on the course</h3>
+                            </div>
+
+                            <span className="course-count">
+                                {selectedRoundId !== null
+                                    ? "1 GPS route selected"
+                                    : `${routeLines.length} GPS routes`}
+                                {selectedRoundId !== null && (
+                                    <button
+                                        className="course-count-clear"
+                                        onClick={() => setSelectedRoundId(null)}
+                                    >
+                                        Show all
+                                    </button>
+                                )}
+                            </span>
+                        </section>
+
+                        <section className="course-map-card">
+                            <MapContainer
+                                center={mapCenter}
+                                zoom={15}
+                                scrollWheelZoom={true}
+                                className="course-map"
+                            >
+                                <TileLayer
+                                    attribution="Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS"
+                                    url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                                />
+
+                                <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" />
+
+                                <Marker
+                                    position={mapCenter}
+                                    icon={courseMarkerIcon(course)}
+                                />
+
+                                <FitRouteBounds
+                                    routes={visibleRoutes.map(
+                                        (route) => route.positions
+                                    )}
+                                />
+
+                                {visibleRoutes.map(
+                                    (route, index) => (
+                                        <Polyline
+                                            key={route.id}
+                                            positions={
+                                                route.positions
+                                            }
+                                            weight={
+                                                selectedRoundId !== null || index === 0
+                                                    ? 4
+                                                    : 3
+                                            }
+                                            opacity={
+                                                selectedRoundId !== null ? 0.9 : 0.65
+                                            }
+                                        />
+                                    )
+                                )}
+                            </MapContainer>
+                        </section>
+                    </>
+                )}
 
                 <section className="section-heading">
                     <div>
@@ -974,84 +914,80 @@ function CourseDetail() {
 
                         <h3>Rounds Played</h3>
                     </div>
+
+                    <span className="course-count">{scores.length} rounds</span>
                 </section>
 
                 <div className="round-list">
-                    {[...activities]
+                    {[...scores]
                         .sort(
                             (a, b) =>
-                                new Date(
-                                    b.start_date
-                                ).getTime() -
-                                new Date(
-                                    a.start_date
-                                ).getTime()
+                                new Date(b.play_date).getTime() -
+                                new Date(a.play_date).getTime()
                         )
-                        .map((round) => {
+                        .map((score) => {
+                            const matchedActivity = activityByDate.get(
+                                new Date(score.play_date).toDateString()
+                            );
+
                             const hasRoute = Boolean(
-                                round.map_polyline && round.map_polyline.length > 0
+                                matchedActivity?.map_polyline &&
+                                    matchedActivity.map_polyline.length > 0
                             );
 
                             return (
-                            <div
-                                className={`round-row${hasRoute ? " round-row-clickable" : ""}${
-                                    selectedRoundId === round.id ? " active" : ""
-                                }`}
-                                key={round.id}
-                                onClick={
-                                    hasRoute
-                                        ? () =>
-                                              setSelectedRoundId((prev) =>
-                                                  prev === round.id ? null : round.id
-                                              )
-                                        : undefined
-                                }
-                            >
-                                <div>
-                                    <strong>
-                                        {formatDate(
-                                            round.start_date
-                                        )}
-                                    </strong>
+                                <div
+                                    className={`round-row${hasRoute ? " round-row-clickable" : ""}${
+                                        hasRoute && selectedRoundId === matchedActivity!.id
+                                            ? " active"
+                                            : ""
+                                    }`}
+                                    key={score.id}
+                                    onClick={
+                                        hasRoute
+                                            ? () =>
+                                                  setSelectedRoundId((prev) =>
+                                                      prev === matchedActivity!.id
+                                                          ? null
+                                                          : matchedActivity!.id
+                                                  )
+                                            : undefined
+                                    }
+                                >
+                                    <div>
+                                        <strong>
+                                            {formatDate(score.play_date)}
+                                        </strong>
 
-                                    <span>{round.name}</span>
+                                        <span>
+                                            {hasRoute ? "GPS route available" : "No GPS"}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <strong>
+                                            {score.adjusted_gross ?? "—"}
+                                        </strong>
+
+                                        <span>Gross</span>
+                                    </div>
+
+                                    <div>
+                                        <strong>
+                                            {score.stableford_points ?? "—"}
+                                        </strong>
+
+                                        <span>Stableford</span>
+                                    </div>
+
+                                    <div>
+                                        <strong>
+                                            {score.handicap_index ?? "—"}
+                                        </strong>
+
+                                        <span>Handicap</span>
+                                    </div>
                                 </div>
-
-                                <div>
-                                    <strong>
-                                        {(
-                                            round.distance_m /
-                                            1000
-                                        ).toFixed(1)}{" "}
-                                        km
-                                    </strong>
-
-                                    <span>Distance</span>
-                                </div>
-
-                                <div>
-                                    <strong>
-                                        {formatDuration(
-                                            round.moving_time_s
-                                        )}
-                                    </strong>
-
-                                    <span>
-                    Moving time
-                  </span>
-                                </div>
-
-                                <div>
-                                    <strong>
-                                        {Math.round(
-                                            round.elevation_gain_m
-                                        )}{" "}
-                                        m
-                                    </strong>
-
-                                    <span>Elevation</span>
-                                </div>
-                            </div>
                             );
                         })}
                 </div>

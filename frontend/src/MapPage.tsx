@@ -12,7 +12,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
-import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
 
 type Course = {
@@ -182,8 +181,6 @@ function MapPage() {
                     >
                         Settings
                     </button>
-
-                    <ThemeToggle />
                 </TopbarActions>
             </header>
 
