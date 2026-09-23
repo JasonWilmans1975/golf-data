@@ -46,6 +46,7 @@ from .friends import (
     toggle_reaction,
     get_notification_summary,
     acknowledge_notifications,
+    list_notifications,
 )
 
 COURSE_PHOTOS_BUCKET = "course-photos"
@@ -613,6 +614,11 @@ def feed_react(
 @app.get("/notifications/summary")
 def notifications_summary(user_id: str = Depends(get_current_user_id)):
     return get_notification_summary(user_id)
+
+
+@app.get("/notifications")
+def notifications_list(limit: int = 20, user_id: str = Depends(get_current_user_id)):
+    return list_notifications(user_id, limit=limit)
 
 
 @app.post("/notifications/ack")

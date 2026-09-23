@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
 
@@ -169,8 +169,146 @@ function applyReaction(
     return { counts, total, my_reaction: newMine };
 }
 
+// Hoisted to module scope (not defined inside FeedPage) so React sees a
+// stable component identity across renders -- defining these inline inside
+// FeedPage recreated them on every keystroke, which made React remount the
+// <input> each time and drop focus after a single character.
+function ReactionBar({
+    itemType,
+    itemId,
+    reactions,
+    reactionPickerOpen,
+    onToggleReactionPicker,
+    onReact,
+}: {
+    itemType: string;
+    itemId: number;
+    reactions: ReactionSummary;
+    reactionPickerOpen: string | null;
+    onToggleReactionPicker: (key: string) => void;
+    onReact: (itemType: string, itemId: number, reaction: string) => void;
+}) {
+    const key = itemKey(itemType, itemId);
+    const activeEmoji = reactions.my_reaction ? REACTION_EMOJI[reactions.my_reaction] : null;
+
+    return (
+        <div className="reaction-bar">
+            <button
+                type="button"
+                className={`feed-action-button${reactions.my_reaction ? " active" : ""}`}
+                onClick={() => onReact(itemType, itemId, "like")}
+            >
+                {activeEmoji || "👍"} {reactions.my_reaction ? "Liked" : "Like"}
+            </button>
+
+            <button
+                type="button"
+                className="reaction-picker-toggle"
+                aria-label="Choose a reaction"
+                onClick={() => onToggleReactionPicker(key)}
+            >
+                ▾
+            </button>
+
+            {reactionPickerOpen === key && (
+                <div className="reaction-picker">
+                    {Object.entries(REACTION_EMOJI).map(([reaction, emoji]) => (
+                        <button
+                            type="button"
+                            key={reaction}
+                            className={reactions.my_reaction === reaction ? "active" : ""}
+                            onClick={() => onReact(itemType, itemId, reaction)}
+                        >
+                            {emoji}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CommentComposer({
+    itemType,
+    itemId,
+    draft,
+    suggestions,
+    emojiPickerOpen,
+    posting,
+    onDraftChange,
+    onSelectMention,
+    onToggleEmojiPicker,
+    onInsertEmoji,
+    onSubmit,
+    inputRef,
+}: {
+    itemType: string;
+    itemId: number;
+    draft: string;
+    suggestions: Friend[];
+    emojiPickerOpen: string | null;
+    posting: boolean;
+    onDraftChange: (key: string, value: string) => void;
+    onSelectMention: (key: string, name: string) => void;
+    onToggleEmojiPicker: (key: string) => void;
+    onInsertEmoji: (key: string, emoji: string) => void;
+    onSubmit: (event: FormEvent, itemType: string, itemId: number) => void;
+    inputRef: (el: HTMLInputElement | null) => void;
+}) {
+    const key = itemKey(itemType, itemId);
+
+    return (
+        <form className="feed-comment-form" onSubmit={(event) => onSubmit(event, itemType, itemId)}>
+            <div className="feed-comment-input-wrap">
+                <input
+                    ref={inputRef}
+                    className="settings-input"
+                    placeholder="Write a comment... @ to mention a friend"
+                    value={draft}
+                    onChange={(event) => onDraftChange(key, event.target.value)}
+                />
+
+                {suggestions.length > 0 && (
+                    <div className="mention-dropdown">
+                        {suggestions.map((friend) => (
+                            <button
+                                type="button"
+                                key={friend.user_id}
+                                onClick={() => onSelectMention(key, friend.display_name)}
+                            >
+                                @{friend.display_name}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="feed-comment-emoji-wrap">
+                <button type="button" className="emoji-toggle" onClick={() => onToggleEmojiPicker(key)}>
+                    🙂
+                </button>
+
+                {emojiPickerOpen === key && (
+                    <div className="emoji-picker">
+                        {EMOJIS.map((emoji) => (
+                            <button type="button" key={emoji} onClick={() => onInsertEmoji(key, emoji)}>
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <button className="sync-button" type="submit" disabled={posting}>
+                {posting ? "Posting..." : "Post"}
+            </button>
+        </form>
+    );
+}
+
 function FeedPage() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
 
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [friends, setFriends] = useState<Friend[]>([]);
@@ -192,6 +330,8 @@ function FeedPage() {
     const [postPhotoUploading, setPostPhotoUploading] = useState(false);
 
     const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+    const feedCardRefs = useRef<Record<string, HTMLElement | null>>({});
+    const [highlightKey, setHighlightKey] = useState<string | null>(null);
 
     function focusCommentInput(key: string) {
         commentInputRefs.current[key]?.focus();
@@ -290,6 +430,21 @@ function FeedPage() {
 
         redirectFirstTimeUsers();
     }, []);
+
+    useEffect(() => {
+        const highlight = searchParams.get("highlight");
+        if (highlight) setHighlightKey(highlight);
+    }, [searchParams]);
+
+    useEffect(() => {
+        if (!highlightKey || feed.length === 0) return;
+
+        const el = feedCardRefs.current[highlightKey];
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        const timeout = setTimeout(() => setHighlightKey(null), 2500);
+        return () => clearTimeout(timeout);
+    }, [highlightKey, feed]);
 
     function handleDraftChange(key: string, value: string) {
         setDrafts((prev) => ({ ...prev, [key]: value }));
@@ -490,112 +645,6 @@ function FeedPage() {
         window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    function ReactionBar({ itemType, itemId, reactions }: {
-        itemType: string;
-        itemId: number;
-        reactions: ReactionSummary;
-    }) {
-        const key = itemKey(itemType, itemId);
-        const activeEmoji = reactions.my_reaction ? REACTION_EMOJI[reactions.my_reaction] : null;
-
-        return (
-            <div className="reaction-bar">
-                <button
-                    type="button"
-                    className={`feed-action-button${reactions.my_reaction ? " active" : ""}`}
-                    onClick={() => react(itemType, itemId, "like")}
-                >
-                    {activeEmoji || "👍"} {reactions.my_reaction ? "Liked" : "Like"}
-                </button>
-
-                <button
-                    type="button"
-                    className="reaction-picker-toggle"
-                    aria-label="Choose a reaction"
-                    onClick={() => setReactionPickerOpen((prev) => (prev === key ? null : key))}
-                >
-                    ▾
-                </button>
-
-                {reactionPickerOpen === key && (
-                    <div className="reaction-picker">
-                        {Object.entries(REACTION_EMOJI).map(([reaction, emoji]) => (
-                            <button
-                                type="button"
-                                key={reaction}
-                                className={reactions.my_reaction === reaction ? "active" : ""}
-                                onClick={() => react(itemType, itemId, reaction)}
-                            >
-                                {emoji}
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    function CommentComposer({ itemType, itemId }: { itemType: string; itemId: number }) {
-        const key = itemKey(itemType, itemId);
-        const suggestions = mentionSuggestions(key);
-
-        return (
-            <form
-                className="feed-comment-form"
-                onSubmit={(event) => handlePostComment(event, itemType, itemId)}
-            >
-                <div className="feed-comment-input-wrap">
-                    <input
-                        ref={(el) => {
-                            commentInputRefs.current[key] = el;
-                        }}
-                        className="settings-input"
-                        placeholder="Write a comment... @ to mention a friend"
-                        value={drafts[key] || ""}
-                        onChange={(event) => handleDraftChange(key, event.target.value)}
-                    />
-
-                    {suggestions.length > 0 && (
-                        <div className="mention-dropdown">
-                            {suggestions.map((friend) => (
-                                <button
-                                    type="button"
-                                    key={friend.user_id}
-                                    onClick={() => selectMention(key, friend.display_name)}
-                                >
-                                    @{friend.display_name}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="feed-comment-emoji-wrap">
-                    <button
-                        type="button"
-                        className="emoji-toggle"
-                        onClick={() => toggleEmojiPicker(key)}
-                    >
-                        🙂
-                    </button>
-
-                    {emojiPickerOpen === key && (
-                        <div className="emoji-picker">
-                            {EMOJIS.map((emoji) => (
-                                <button type="button" key={emoji} onClick={() => insertEmoji(key, emoji)}>
-                                    {emoji}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <button className="sync-button" type="submit" disabled={posting.has(key)}>
-                    {posting.has(key) ? "Posting..." : "Post"}
-                </button>
-            </form>
-        );
-    }
 
     return (
         <>
@@ -743,7 +792,13 @@ function FeedPage() {
                         const itemComments = comments[key] || [];
 
                         return (
-                            <article className="feed-card" key={key}>
+                            <article
+                                className={`feed-card${highlightKey === key ? " feed-card-highlight" : ""}`}
+                                key={key}
+                                ref={(el) => {
+                                    feedCardRefs.current[key] = el;
+                                }}
+                            >
                                 <div className="feed-card-header">
                                     <div className="feed-avatar">{initials(item.player_name)}</div>
 
@@ -885,6 +940,11 @@ function FeedPage() {
                                         itemType={item.item_type}
                                         itemId={item.item_id}
                                         reactions={item.reactions}
+                                        reactionPickerOpen={reactionPickerOpen}
+                                        onToggleReactionPicker={(k) =>
+                                            setReactionPickerOpen((prev) => (prev === k ? null : k))
+                                        }
+                                        onReact={react}
                                     />
 
                                     <button
@@ -960,6 +1020,13 @@ function FeedPage() {
                                                                 itemType="comment"
                                                                 itemId={comment.id}
                                                                 reactions={comment.reactions}
+                                                                reactionPickerOpen={reactionPickerOpen}
+                                                                onToggleReactionPicker={(k) =>
+                                                                    setReactionPickerOpen((prev) =>
+                                                                        prev === k ? null : k
+                                                                    )
+                                                                }
+                                                                onReact={react}
                                                             />
                                                         </div>
                                                     </div>
@@ -968,7 +1035,22 @@ function FeedPage() {
                                         )}
                                     </div>
 
-                                    <CommentComposer itemType={item.item_type} itemId={item.item_id} />
+                                    <CommentComposer
+                                        itemType={item.item_type}
+                                        itemId={item.item_id}
+                                        draft={drafts[key] || ""}
+                                        suggestions={mentionSuggestions(key)}
+                                        emojiPickerOpen={emojiPickerOpen}
+                                        posting={posting.has(key)}
+                                        onDraftChange={handleDraftChange}
+                                        onSelectMention={selectMention}
+                                        onToggleEmojiPicker={toggleEmojiPicker}
+                                        onInsertEmoji={insertEmoji}
+                                        onSubmit={handlePostComment}
+                                        inputRef={(el) => {
+                                            commentInputRefs.current[key] = el;
+                                        }}
+                                    />
                                 </div>
                             </article>
                         );

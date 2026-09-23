@@ -743,22 +743,7 @@ def delete_comment(user_id: str, comment_id: int) -> None:
     supabase.table("feed_comments").delete().eq("id", comment_id).execute()
 
 
-def get_notification_summary(user_id: str) -> dict:
-    """Lightweight, read-only check used for the Feed nav badge: has
-    anything happened (a like on something of mine, or a mention of me)
-    since I last opened the Feed page. Not a full notifications inbox --
-    just enough to tell the user "there's something new"."""
-    profile_response = (
-        supabase
-        .table("profiles")
-        .select("notifications_checked_at,display_name,email")
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-    profile = profile_response.data[0] if profile_response.data else {}
-    since = profile.get("notifications_checked_at") or "1970-01-01T00:00:00Z"
-
+def _my_item_ids(user_id: str) -> dict[str, list[int]]:
     my_round_ids = [
         row["score_id"]
         for row in fetch_all(
@@ -773,7 +758,31 @@ def get_notification_summary(user_id: str) -> dict:
         for row in (supabase.table("feed_comments").select("id").eq("user_id", user_id).execute().data or [])
     ]
 
-    for item_type, ids in (("round", my_round_ids), ("post", my_post_ids), ("comment", my_comment_ids)):
+    return {"round": my_round_ids, "post": my_post_ids, "comment": my_comment_ids}
+
+
+def _get_profile_row(user_id: str) -> dict:
+    response = (
+        supabase
+        .table("profiles")
+        .select("notifications_checked_at,display_name,email")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else {}
+
+
+def get_notification_summary(user_id: str) -> dict:
+    """Lightweight, read-only check used for the Feed nav badge: has
+    anything happened (a like on something of mine, or a mention of me)
+    since I last opened the Feed page. Not a full notifications inbox --
+    just enough to tell the user "there's something new"."""
+    profile = _get_profile_row(user_id)
+    since = profile.get("notifications_checked_at") or "1970-01-01T00:00:00Z"
+    my_items = _my_item_ids(user_id)
+
+    for item_type, ids in (("round", my_items["round"]), ("post", my_items["post"]), ("comment", my_items["comment"])):
         if not ids:
             continue
 
@@ -814,3 +823,118 @@ def get_notification_summary(user_id: str) -> dict:
 
 def acknowledge_notifications(user_id: str) -> None:
     supabase.table("profiles").update({"notifications_checked_at": _now()}).eq("user_id", user_id).execute()
+
+
+def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
+    """A real, clickable notifications list (unlike get_notification_summary,
+    which is just a yes/no badge check) -- a like on something of mine, or a
+    mention of me, each resolved to the round/post it belongs to so the
+    frontend can jump straight to it."""
+    profile = _get_profile_row(user_id)
+    checked_at = profile.get("notifications_checked_at") or "1970-01-01T00:00:00Z"
+    display_name = _display_name(profile)
+    my_items = _my_item_ids(user_id)
+
+    raw: list[dict] = []
+
+    for item_type, ids in my_items.items():
+        if not ids:
+            continue
+
+        response = (
+            supabase
+            .table("feed_likes")
+            .select("id,item_id,user_id,reaction,created_at")
+            .eq("item_type", item_type)
+            .in_("item_id", ids)
+            .neq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+        for row in response.data or []:
+            raw.append({
+                "id": f"like:{row['id']}",
+                "type": "like",
+                "actor_id": row["user_id"],
+                "item_type": item_type,
+                "item_id": row["item_id"],
+                "reaction": row["reaction"],
+                "created_at": row["created_at"],
+            })
+
+    for table, item_type in (("posts", "post"), ("feed_comments", "comment")):
+        response = (
+            supabase
+            .table(table)
+            .select("id,user_id,created_at")
+            .ilike("body", f"%@{display_name}%")
+            .neq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+
+        for row in response.data or []:
+            raw.append({
+                "id": f"mention:{item_type}:{row['id']}",
+                "type": "mention",
+                "actor_id": row["user_id"],
+                "item_type": item_type,
+                "item_id": row["id"],
+                "reaction": None,
+                "created_at": row["created_at"],
+            })
+
+    if not raw:
+        return []
+
+    actor_ids = list({row["actor_id"] for row in raw})
+    profiles_response = (
+        supabase.table("profiles").select("user_id,display_name,email").in_("user_id", actor_ids).execute()
+    )
+    profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+
+    # A comment doesn't render as its own card -- it's shown inline under
+    # the round/post it belongs to -- so resolve comment notifications to
+    # that parent for navigation/highlighting purposes.
+    comment_ids = [row["item_id"] for row in raw if row["item_type"] == "comment"]
+    parent_by_comment_id = {}
+
+    if comment_ids:
+        comments_response = (
+            supabase
+            .table("feed_comments")
+            .select("id,item_type,item_id")
+            .in_("id", list(set(comment_ids)))
+            .execute()
+        )
+        parent_by_comment_id = {
+            row["id"]: (row["item_type"], row["item_id"]) for row in comments_response.data or []
+        }
+
+    notifications = []
+
+    for row in raw:
+        target_type, target_id = row["item_type"], row["item_id"]
+
+        if row["item_type"] == "comment":
+            parent = parent_by_comment_id.get(row["item_id"])
+            if parent:
+                target_type, target_id = parent
+
+        notifications.append({
+            "id": row["id"],
+            "type": row["type"],
+            "actor_name": _display_name(profile_by_user.get(row["actor_id"])),
+            "reaction": row["reaction"],
+            "target_item_type": target_type,
+            "target_item_id": target_id,
+            "created_at": row["created_at"],
+            "read": row["created_at"] <= checked_at,
+        })
+
+    notifications.sort(key=lambda n: n["created_at"], reverse=True)
+
+    return notifications[:limit]
