@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
+import NotificationsBell from "./NotificationsBell";
 
 type ReactionSummary = {
     counts: Record<string, number>;
@@ -678,16 +679,12 @@ function FeedPage() {
                     <button className="header-secondary-button" onClick={() => navigate("/settings")}>
                         Settings
                     </button>
+
+                    <NotificationsBell />
                 </TopbarActions>
             </header>
 
             <main className="content">
-                <section className="course-hero">
-                    <p className="eyebrow">GOLFBOOK</p>
-                    <h2>What everyone's been playing.</h2>
-                    <p>Your rounds and your friends', newest first.</p>
-                </section>
-
                 <div className="feed-container">
                 <div className="feed-card">
                     {shareTarget && (
