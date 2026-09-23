@@ -160,7 +160,7 @@ button {
 .content {
     width: min(1180px, calc(100% - 40px));
     margin: 0 auto;
-    padding: 42px 0 130px;
+    padding: 42px 0 70px;
 }
 
 .hero {
@@ -735,9 +735,13 @@ button {
     left: 0;
     right: 0;
     bottom: 0;
+    max-width: 600px;
+    margin: 0 auto;
     display: flex;
     background: var(--panel);
-    border-top: 1px solid var(--border);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
     box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
     z-index: 30;
     padding-bottom: env(safe-area-inset-bottom, 0);
@@ -855,6 +859,7 @@ button {
 .feed-container {
     max-width: 600px;
     margin: 0 auto;
+    padding-bottom: 60px;
 }
 
 .feed-card {

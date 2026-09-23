@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
+import BottomNav from "./BottomNav";
 
 type ReactionSummary = {
     counts: Record<string, number>;
@@ -1083,6 +1084,8 @@ function FeedPage() {
                 )}
                 </div>
             </main>
+
+            <BottomNav />
         </>
     );
 }

@@ -17,7 +17,6 @@ import TeesheetPage from "./TeesheetPage";
 import FriendsPage from "./FriendsPage";
 import FeedPage from "./FeedPage";
 import FeedNavButton from "./FeedNavButton";
-import BottomNav from "./BottomNav";
 import LoginPage from "./LoginPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -1054,12 +1053,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
         return <Navigate to="/login" replace />;
     }
 
-    return (
-        <>
-            {children}
-            <BottomNav />
-        </>
-    );
+    return <>{children}</>;
 }
 
 function AppRoutes() {
