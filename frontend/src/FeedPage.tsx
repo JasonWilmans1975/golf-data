@@ -715,7 +715,7 @@ function FeedPage() {
 
 
     return (
-        <>
+        <div className="feed-page">
             <header className="topbar">
                 <div>
                     <BrandLogo />
@@ -1124,7 +1124,7 @@ function FeedPage() {
             </main>
 
             <BottomNav />
-        </>
+        </div>
     );
 }
 

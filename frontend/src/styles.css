@@ -34,18 +34,18 @@
     --ink-soft: #241d66;
     --panel: #ffffff;
     --panel-2: #f4f4f6;
-    --accent: #e2231a;
-    --accent-dark: #b91c14;
-    --accent-bright: #ff4438;
-    --accent-soft: rgba(226, 35, 26, 0.08);
-    --accent-glow: rgba(226, 35, 26, 0.25);
+    --accent: #007ffd;
+    --accent-dark: #0040de;
+    --accent-bright: #3f9dff;
+    --accent-soft: rgba(0, 127, 253, 0.08);
+    --accent-glow: rgba(0, 127, 253, 0.25);
     --accent-text: #ffffff;
     --text: #14141c;
     --text-muted: #6b7280;
     --border: rgba(20, 20, 30, 0.1);
     --border-strong: rgba(20, 20, 30, 0.22);
     --body-bg: #f4f5f7;
-    --body-glow: rgba(226, 35, 26, 0.05);
+    --body-glow: rgba(0, 127, 253, 0.05);
     --body-glow-2: rgba(26, 21, 80, 0.04);
     --error: #c62828;
 }
@@ -869,6 +869,17 @@ button {
     font-size: 11px;
     color: var(--text-muted);
     flex-shrink: 0;
+}
+
+.feed-page {
+    /* The logo's darker blue, used for every accent-colored element within
+       the Feed page (buttons, active/liked states, mentions) -- the lighter
+       blue in :root[data-theme="light"] is used everywhere else. */
+    --accent: #0040de;
+    --accent-dark: #002fa3;
+    --accent-bright: #2f5eff;
+    --accent-soft: rgba(0, 64, 222, 0.08);
+    --accent-glow: rgba(0, 64, 222, 0.25);
 }
 
 .feed-container {

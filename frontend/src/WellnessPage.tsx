@@ -33,7 +33,7 @@ const CHART_PALETTES = {
         tooltipLabelStyle: { color: "#8b93a1" },
     },
     light: {
-        accent: "#e2231a",
+        accent: "#007ffd",
         grid: "rgba(20,20,30,0.1)",
         tick: { fill: "#6b7280", fontSize: 11 },
         tooltipStyle: {
