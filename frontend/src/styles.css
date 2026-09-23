@@ -106,6 +106,10 @@ button {
     color: white;
 }
 
+.brand-logo-accent {
+    color: #53b9ff;
+}
+
 .brand-logo-icon {
     width: 16px;
     height: 16px;
