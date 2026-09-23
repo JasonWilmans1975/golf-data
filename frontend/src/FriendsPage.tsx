@@ -251,7 +251,7 @@ function FriendsPage() {
                                         </button>
 
                                         <button
-                                            className="header-secondary-button"
+                                            className="round-row-button"
                                             onClick={() => handleRespond(request.id, false)}
                                         >
                                             Decline
@@ -298,7 +298,7 @@ function FriendsPage() {
                                 </div>
 
                                 <button
-                                    className="header-secondary-button"
+                                    className="round-row-button"
                                     onClick={() =>
                                         handleRemoveFriend(friend.user_id, friend.display_name)
                                     }
