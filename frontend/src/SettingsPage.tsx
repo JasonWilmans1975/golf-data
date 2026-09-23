@@ -399,13 +399,6 @@ function SettingsPage() {
 
                     <FeedNavButton />
 
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/friends")}
-                    >
-                        Friends
-                    </button>
-
                     <button className="header-secondary-button" onClick={handleLogout}>
                         Log out
                     </button>

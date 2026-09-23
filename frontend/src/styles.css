@@ -160,7 +160,7 @@ button {
 .content {
     width: min(1180px, calc(100% - 40px));
     margin: 0 auto;
-    padding: 42px 0 70px;
+    padding: 42px 0 130px;
 }
 
 .hero {
@@ -703,61 +703,74 @@ button {
     object-fit: cover;
 }
 
-.nav-button-with-badge {
-    position: relative;
-}
-
-.nav-badge {
-    position: absolute;
-    top: 6px;
-    right: 8px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--error);
-}
-
 .notifications-wrap {
     position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+    flex: 1;
+    display: flex;
 }
 
-.notifications-bell {
+.bottom-nav-icon-wrap {
     position: relative;
-    border: 1px solid var(--border-strong);
-    background: transparent;
-    color: white;
-    border-radius: 4px;
-    padding: 10px 12px;
-    font-size: 15px;
-    cursor: pointer;
-}
-
-.notifications-bell:hover {
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.notifications-bell .nav-badge {
-    top: 4px;
-    right: 4px;
+    display: inline-flex;
 }
 
 .nav-badge-count {
     position: absolute;
     top: -6px;
-    right: -6px;
-    min-width: 18px;
-    height: 18px;
+    right: -10px;
+    min-width: 16px;
+    height: 16px;
     padding: 0 4px;
-    border-radius: 9px;
+    border-radius: 8px;
     background: var(--error);
     color: white;
     font-size: 10px;
     font-weight: 800;
-    line-height: 18px;
+    line-height: 16px;
     text-align: center;
+}
+
+.bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+    z-index: 30;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.bottom-nav-button {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 10px 0 8px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.bottom-nav-button:hover,
+.bottom-nav-button.active {
+    color: var(--accent);
+}
+
+.bottom-nav-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.bottom-nav-label {
+    font-size: 11px;
+    font-weight: 700;
 }
 
 .notifications-panel {
@@ -773,6 +786,17 @@ button {
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
     z-index: 20;
+}
+
+.notifications-panel-up {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 8px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(320px, 90vw);
 }
 
 .notifications-panel-header {

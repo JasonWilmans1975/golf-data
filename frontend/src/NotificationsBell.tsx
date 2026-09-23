@@ -108,19 +108,18 @@ function NotificationsBell() {
 
     return (
         <div className="notifications-wrap" ref={wrapRef}>
-            <button
-                className="notifications-bell nav-button-with-badge"
-                aria-label="Notifications"
-                onClick={toggleOpen}
-            >
-                🔔
-                {unreadCount > 0 && (
-                    <span className="nav-badge-count">{unreadCount > 9 ? "9+" : unreadCount}</span>
-                )}
+            <button className="bottom-nav-button" aria-label="Notifications" onClick={toggleOpen}>
+                <span className="bottom-nav-icon-wrap">
+                    <span className="bottom-nav-icon">🔔</span>
+                    {unreadCount > 0 && (
+                        <span className="nav-badge-count">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                    )}
+                </span>
+                <span className="bottom-nav-label">Notifications</span>
             </button>
 
             {open && (
-                <div className="notifications-panel">
+                <div className="notifications-panel notifications-panel-up">
                     <div className="notifications-panel-header">Notifications</div>
 
                     {!loaded ? (
