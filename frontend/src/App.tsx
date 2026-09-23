@@ -15,6 +15,7 @@ import HandicapPage from "./HandicapPage";
 import WellnessPage from "./WellnessPage";
 import TeesheetPage from "./TeesheetPage";
 import FriendsPage from "./FriendsPage";
+import FeedPage from "./FeedPage";
 import LoginPage from "./LoginPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -345,6 +346,13 @@ function Dashboard() {
                         onClick={() => navigate("/teesheet")}
                     >
                         Teesheet
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/feed")}
+                    >
+                        Feed
                     </button>
 
                     <button
@@ -1159,6 +1167,15 @@ function AppRoutes() {
                 element={
                     <RequireAuth>
                         <FriendsPage />
+                    </RequireAuth>
+                }
+            />
+
+            <Route
+                path="/feed"
+                element={
+                    <RequireAuth>
+                        <FeedPage />
                     </RequireAuth>
                 }
             />

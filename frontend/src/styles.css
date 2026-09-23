@@ -703,6 +703,153 @@ button {
     object-fit: cover;
 }
 
+.feed-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+
+.feed-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.feed-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.feed-card-header div {
+    display: flex;
+    flex-direction: column;
+}
+
+.feed-card-header strong {
+    font-size: 14px;
+    color: var(--text);
+}
+
+.feed-card-header span {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.feed-card-photo {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 4px;
+    margin-bottom: 14px;
+}
+
+.feed-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.feed-card-course {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.feed-card-stats {
+    display: flex;
+    gap: 20px;
+}
+
+.feed-card-stats div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.feed-card-stats strong {
+    font-size: 16px;
+    color: var(--text);
+}
+
+.feed-card-stats span {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.feed-card-footer {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+}
+
+.feed-comment-toggle {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+}
+
+.feed-comment-toggle:hover {
+    color: var(--text);
+}
+
+.feed-comments {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.feed-comment {
+    background: var(--panel-2);
+    border-radius: 4px;
+    padding: 8px 12px;
+}
+
+.feed-comment strong {
+    font-size: 13px;
+    color: var(--text);
+    margin-right: 6px;
+}
+
+.feed-comment span {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.feed-comment p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.feed-comment-form {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.feed-comment-form input {
+    flex: 1;
+}
+
 .round-row-button {
     border: 1px solid var(--border-strong);
     background: transparent;

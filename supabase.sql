@@ -272,3 +272,16 @@ begin
 exception
   when duplicate_object then null;
 end $$;
+
+-- Comments on a round, shown on the new Feed page. Visibility (who can
+-- read/write a round's comments) is enforced in the backend, same as
+-- everything else -- this table is only ever touched via the service role.
+create table if not exists public.round_comments (
+  id bigint generated always as identity primary key,
+  score_id bigint not null references public.handicap_scores(score_id),
+  user_id uuid not null,
+  body text not null,
+  created_at timestamptz default now()
+);
+
+create index if not exists round_comments_score_id_idx on public.round_comments(score_id);

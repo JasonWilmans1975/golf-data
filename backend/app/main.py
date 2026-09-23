@@ -38,6 +38,10 @@ from .friends import (
     list_friends,
     remove_friend,
     get_friends_feed,
+    get_activity_feed,
+    list_comments,
+    add_comment,
+    delete_comment,
 )
 
 COURSE_PHOTOS_BUCKET = "course-photos"
@@ -508,4 +512,41 @@ def friends_list(user_id: str = Depends(get_current_user_id)):
 @app.delete("/friends/{friend_user_id}")
 def friends_remove(friend_user_id: str, user_id: str = Depends(get_current_user_id)):
     remove_friend(user_id, friend_user_id)
+    return {"removed": True}
+
+
+@app.get("/feed")
+def activity_feed(limit: int = 20, user_id: str = Depends(get_current_user_id)):
+    return get_activity_feed(user_id, limit=limit)
+
+
+@app.get("/rounds/{score_id}/comments")
+def round_comments_list(score_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        return list_comments(user_id, score_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+
+class CommentBody(BaseModel):
+    body: str
+
+
+@app.post("/rounds/{score_id}/comments")
+def round_comments_create(
+    score_id: int, body: CommentBody, user_id: str = Depends(get_current_user_id)
+):
+    try:
+        return add_comment(user_id, score_id, body.body)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+
+
+@app.delete("/rounds/comments/{comment_id}")
+def round_comment_delete(comment_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        delete_comment(user_id, comment_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
     return {"removed": True}

@@ -270,12 +270,7 @@ def remove_friend(user_id: str, friend_user_id: str) -> None:
     )
 
 
-def get_friends_feed(user_id: str, limit: int = 30) -> list[dict]:
-    friend_ids = list_friend_ids(user_id)
-
-    if not friend_ids:
-        return []
-
+def _build_feed(user_ids: list[str], limit: int) -> list[dict]:
     scores_response = (
         supabase
         .table("handicap_scores")
@@ -283,7 +278,7 @@ def get_friends_feed(user_id: str, limit: int = 30) -> list[dict]:
             "score_id,user_id,play_date,adjusted_gross,stableford_points,"
             "course_id,course_name,country_name,country_flag_url"
         )
-        .in_("user_id", friend_ids)
+        .in_("user_id", user_ids)
         .order("play_date", desc=True)
         .limit(limit)
         .execute()
@@ -315,6 +310,16 @@ def get_friends_feed(user_id: str, limit: int = 30) -> list[dict]:
         )
         course_by_id = {row["id"]: row for row in courses_response.data or []}
 
+    score_ids = [score["score_id"] for score in scores]
+    comment_counts: dict[int, int] = {}
+
+    if score_ids:
+        comments_response = (
+            supabase.table("round_comments").select("score_id").in_("score_id", score_ids).execute()
+        )
+        for row in comments_response.data or []:
+            comment_counts[row["score_id"]] = comment_counts.get(row["score_id"], 0) + 1
+
     feed = []
     for score in scores:
         course = course_by_id.get(score.get("course_id"), {})
@@ -329,6 +334,116 @@ def get_friends_feed(user_id: str, limit: int = 30) -> list[dict]:
             "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
             "country_name": score.get("country_name") or course.get("country_name"),
             "country_flag_url": score.get("country_flag_url"),
+            "comment_count": comment_counts.get(score["score_id"], 0),
         })
 
     return feed
+
+
+def get_friends_feed(user_id: str, limit: int = 30) -> list[dict]:
+    friend_ids = list_friend_ids(user_id)
+
+    if not friend_ids:
+        return []
+
+    return _build_feed(friend_ids, limit)
+
+
+def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
+    circle_ids = list(set(list_friend_ids(user_id) + [user_id]))
+
+    return _build_feed(circle_ids, limit)
+
+
+def _round_owner(score_id: int) -> str | None:
+    response = (
+        supabase.table("handicap_scores").select("user_id").eq("score_id", score_id).limit(1).execute()
+    )
+
+    if not response.data:
+        return None
+
+    return response.data[0]["user_id"]
+
+
+def _can_view_round(viewer_id: str, owner_id: str) -> bool:
+    if viewer_id == owner_id:
+        return True
+
+    return owner_id in list_friend_ids(viewer_id)
+
+
+def list_comments(user_id: str, score_id: int) -> list[dict]:
+    owner_id = _round_owner(score_id)
+
+    if owner_id is None or not _can_view_round(user_id, owner_id):
+        raise ValueError("Round not found")
+
+    response = (
+        supabase
+        .table("round_comments")
+        .select("id,user_id,body,created_at")
+        .eq("score_id", score_id)
+        .order("created_at")
+        .execute()
+    )
+    comments = response.data or []
+
+    if not comments:
+        return []
+
+    profiles_response = (
+        supabase
+        .table("profiles")
+        .select("user_id,display_name,email")
+        .in_("user_id", list({comment["user_id"] for comment in comments}))
+        .execute()
+    )
+    profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+
+    return [
+        {
+            "id": comment["id"],
+            "user_id": comment["user_id"],
+            "author_name": _display_name(profile_by_user.get(comment["user_id"])),
+            "body": comment["body"],
+            "created_at": comment["created_at"],
+        }
+        for comment in comments
+    ]
+
+
+def add_comment(user_id: str, score_id: int, body: str) -> dict:
+    body = body.strip()
+
+    if not body:
+        raise ValueError("Comment can't be empty")
+
+    if len(body) > 1000:
+        raise ValueError("Comment is too long")
+
+    owner_id = _round_owner(score_id)
+
+    if owner_id is None or not _can_view_round(user_id, owner_id):
+        raise ValueError("Round not found")
+
+    response = (
+        supabase
+        .table("round_comments")
+        .insert({"score_id": score_id, "user_id": user_id, "body": body})
+        .execute()
+    )
+
+    return response.data[0]
+
+
+def delete_comment(user_id: str, comment_id: int) -> None:
+    response = supabase.table("round_comments").select("id,user_id").eq("id", comment_id).limit(1).execute()
+
+    if not response.data:
+        raise ValueError("Comment not found")
+
+    if response.data[0]["user_id"] != user_id:
+        raise ValueError("Comment not found")
+
+    supabase.table("round_comments").delete().eq("id", comment_id).execute()

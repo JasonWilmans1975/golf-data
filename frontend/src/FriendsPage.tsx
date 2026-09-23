@@ -177,6 +177,10 @@ function FriendsPage() {
                         Teesheet
                     </button>
 
+                    <button className="header-secondary-button" onClick={() => navigate("/feed")}>
+                        Feed
+                    </button>
+
                     <button className="header-secondary-button" onClick={() => navigate("/settings")}>
                         Settings
                     </button>

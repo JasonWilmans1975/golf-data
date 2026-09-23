@@ -247,6 +247,13 @@ function HandicapPage() {
 
                     <button
                         className="header-secondary-button"
+                        onClick={() => navigate("/feed")}
+                    >
+                        Feed
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
                         onClick={() => navigate("/friends")}
                     >
                         Friends
