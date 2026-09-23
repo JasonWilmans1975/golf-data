@@ -47,6 +47,7 @@ from .friends import (
     add_comment,
     delete_comment,
     toggle_reaction,
+    get_item_reactions,
     acknowledge_notifications,
     list_notifications,
 )
@@ -640,6 +641,11 @@ def feed_react(
         return toggle_reaction(user_id, item_type, item_id, body.reaction)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
+
+
+@app.get("/feed/{item_type}/{item_id}/reactions")
+def feed_item_reactions(item_type: str, item_id: int, user_id: str = Depends(get_current_user_id)):
+    return get_item_reactions(user_id, item_type, item_id)
 
 
 @app.get("/notifications")

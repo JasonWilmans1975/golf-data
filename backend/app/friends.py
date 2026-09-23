@@ -436,6 +436,11 @@ def toggle_reaction(user_id: str, item_type: str, item_id: int, reaction: str) -
     return {"reaction": reaction}
 
 
+def get_item_reactions(user_id: str, item_type: str, item_id: int) -> dict:
+    summary = _reaction_summary(user_id, [(item_type, item_id)])
+    return summary.get((item_type, item_id), _empty_reactions())
+
+
 def _snapshot_item(item_type: str, item_id: int) -> dict | None:
     if item_type == "round":
         response = (

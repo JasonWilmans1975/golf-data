@@ -338,6 +338,11 @@ alter table if exists public.profiles add column if not exists notifications_che
 
 alter table public.feed_likes enable row level security;
 
+-- Broadened beyond "just my own stuff" so the Feed page can live-update
+-- reaction counts on a friend's post too, not only notify me about likes on
+-- my own content -- still exactly the same visibility /feed already grants
+-- (I can see a like if I can see the round/post/comment it's on: mine, or a
+-- friend's), just reachable over Realtime as well as the REST API.
 drop policy if exists "Users can view relevant likes" on public.feed_likes;
 create policy "Users can view relevant likes"
 on public.feed_likes
@@ -346,15 +351,33 @@ using (
   auth.uid() = user_id
   or (item_type = 'round' and exists (
     select 1 from public.handicap_scores hs
-    where hs.score_id = feed_likes.item_id and hs.user_id = auth.uid()
+    where hs.score_id = feed_likes.item_id
+      and (hs.user_id = auth.uid() or exists (
+        select 1 from public.friend_requests fr
+        where fr.status = 'accepted'
+          and ((fr.from_user_id = auth.uid() and fr.to_user_id = hs.user_id)
+            or (fr.to_user_id = auth.uid() and fr.from_user_id = hs.user_id))
+      ))
   ))
   or (item_type = 'post' and exists (
     select 1 from public.posts p
-    where p.id = feed_likes.item_id and p.user_id = auth.uid()
+    where p.id = feed_likes.item_id
+      and (p.user_id = auth.uid() or exists (
+        select 1 from public.friend_requests fr
+        where fr.status = 'accepted'
+          and ((fr.from_user_id = auth.uid() and fr.to_user_id = p.user_id)
+            or (fr.to_user_id = auth.uid() and fr.from_user_id = p.user_id))
+      ))
   ))
   or (item_type = 'comment' and exists (
     select 1 from public.feed_comments fc
-    where fc.id = feed_likes.item_id and fc.user_id = auth.uid()
+    where fc.id = feed_likes.item_id
+      and (fc.user_id = auth.uid() or exists (
+        select 1 from public.friend_requests fr
+        where fr.status = 'accepted'
+          and ((fr.from_user_id = auth.uid() and fr.to_user_id = fc.user_id)
+            or (fr.to_user_id = auth.uid() and fr.from_user_id = fc.user_id))
+      ))
   ))
 );
 

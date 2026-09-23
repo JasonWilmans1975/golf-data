@@ -4,6 +4,7 @@ import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
 import BrandLogo from "./BrandLogo";
 import BottomNav from "./BottomNav";
+import { supabase } from "./supabaseClient";
 
 type ReactionSummary = {
     counts: Record<string, number>;
@@ -594,6 +595,31 @@ function FeedPage() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        // Live-update a card's reaction counts the moment a friend reacts,
+        // instead of only refreshing on the next page load.
+        const channel = supabase
+            .channel("feed-page-likes")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "feed_likes" },
+                (payload) => {
+                    const row = (payload.new ?? payload.old) as
+                        | { item_type?: string; item_id?: number }
+                        | null;
+
+                    if (row?.item_type && row?.item_id != null) {
+                        refreshItemReactions(row.item_type, row.item_id);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
     function handleDraftChange(key: string, value: string) {
         setDrafts((prev) => ({ ...prev, [key]: value }));
 
@@ -679,6 +705,30 @@ function FeedPage() {
                 next.delete(key);
                 return next;
             });
+        }
+    }
+
+    async function refreshItemReactions(itemType: string, itemId: number) {
+        // Only top-level feed cards (rounds/posts) are patched live -- a
+        // like on a comment isn't worth the extra lookup to find which
+        // comment list it lives under for this first pass.
+        if (itemType !== "round" && itemType !== "post") return;
+
+        try {
+            const response = await authFetch(`${API}/feed/${itemType}/${itemId}/reactions`);
+            if (!response.ok) return;
+
+            const reactions: ReactionSummary = await response.json();
+
+            setFeed((prev) =>
+                prev.map((item) =>
+                    item.item_type === itemType && item.item_id === itemId
+                        ? { ...item, reactions }
+                        : item
+                )
+            );
+        } catch (error) {
+            console.error(error);
         }
     }
 
