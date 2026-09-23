@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
+import { supabase } from "./supabaseClient";
 
 type Notification = {
     id: string;
@@ -61,18 +62,34 @@ function NotificationsBell() {
         // network round trip.
         let cancelled = false;
 
-        authFetch(`${API}/notifications`)
-            .then((response) => (response.ok ? response.json() : null))
-            .then((body) => {
-                if (!cancelled && body) setNotifications(body);
-            })
-            .catch(() => {})
-            .finally(() => {
-                if (!cancelled) setLoaded(true);
-            });
+        function refetch() {
+            authFetch(`${API}/notifications`)
+                .then((response) => (response.ok ? response.json() : null))
+                .then((body) => {
+                    if (!cancelled && body) setNotifications(body);
+                })
+                .catch(() => {})
+                .finally(() => {
+                    if (!cancelled) setLoaded(true);
+                });
+        }
+
+        refetch();
+
+        // Realtime here is just a "something changed, go re-fetch" signal --
+        // the actual notification list (whose content, who's a friend) is
+        // always recomputed by the trusted GET /notifications endpoint, not
+        // read directly off the realtime payload.
+        const channel = supabase
+            .channel("notifications-changes")
+            .on("postgres_changes", { event: "*", schema: "public", table: "feed_likes" }, refetch)
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, refetch)
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "feed_comments" }, refetch)
+            .subscribe();
 
         return () => {
             cancelled = true;
+            supabase.removeChannel(channel);
         };
     }, []);
 

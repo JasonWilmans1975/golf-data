@@ -329,3 +329,84 @@ on conflict (id) do nothing;
 -- Lightweight unread marker for the Feed nav badge (a like on something of
 -- mine, or a mention of me, since I last opened the Feed page).
 alter table if exists public.profiles add column if not exists notifications_checked_at timestamptz;
+
+-- Realtime for the notifications bell: RLS policies here only ever expose
+-- the same rows a user could already read through the authenticated
+-- backend (their own content, or a friend's) -- Realtime just gives the
+-- frontend a live "something changed, go re-fetch /notifications" signal
+-- instead of a new way to see data the API wouldn't already return.
+
+alter table public.feed_likes enable row level security;
+
+drop policy if exists "Users can view relevant likes" on public.feed_likes;
+create policy "Users can view relevant likes"
+on public.feed_likes
+for select
+using (
+  auth.uid() = user_id
+  or (item_type = 'round' and exists (
+    select 1 from public.handicap_scores hs
+    where hs.score_id = feed_likes.item_id and hs.user_id = auth.uid()
+  ))
+  or (item_type = 'post' and exists (
+    select 1 from public.posts p
+    where p.id = feed_likes.item_id and p.user_id = auth.uid()
+  ))
+  or (item_type = 'comment' and exists (
+    select 1 from public.feed_comments fc
+    where fc.id = feed_likes.item_id and fc.user_id = auth.uid()
+  ))
+);
+
+alter table public.posts enable row level security;
+
+drop policy if exists "Users can view their own or a friend's posts" on public.posts;
+create policy "Users can view their own or a friend's posts"
+on public.posts
+for select
+using (
+  user_id = auth.uid()
+  or exists (
+    select 1 from public.friend_requests fr
+    where fr.status = 'accepted'
+      and ((fr.from_user_id = auth.uid() and fr.to_user_id = posts.user_id)
+        or (fr.to_user_id = auth.uid() and fr.from_user_id = posts.user_id))
+  )
+);
+
+alter table public.feed_comments enable row level security;
+
+drop policy if exists "Users can view their own or a friend's comments" on public.feed_comments;
+create policy "Users can view their own or a friend's comments"
+on public.feed_comments
+for select
+using (
+  user_id = auth.uid()
+  or exists (
+    select 1 from public.friend_requests fr
+    where fr.status = 'accepted'
+      and ((fr.from_user_id = auth.uid() and fr.to_user_id = feed_comments.user_id)
+        or (fr.to_user_id = auth.uid() and fr.from_user_id = feed_comments.user_id))
+  )
+);
+
+do $$
+begin
+  alter publication supabase_realtime add table public.feed_likes;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.posts;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.feed_comments;
+exception
+  when duplicate_object then null;
+end $$;
