@@ -319,3 +319,9 @@ create table if not exists public.feed_likes (
 );
 
 create index if not exists feed_likes_item_idx on public.feed_likes(item_type, item_id);
+
+alter table if exists public.posts add column if not exists photo_url text;
+
+insert into storage.buckets (id, name, public)
+values ('post-photos', 'post-photos', true)
+on conflict (id) do nothing;

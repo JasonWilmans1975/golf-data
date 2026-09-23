@@ -47,6 +47,7 @@ from .friends import (
 )
 
 COURSE_PHOTOS_BUCKET = "course-photos"
+POST_PHOTOS_BUCKET = "post-photos"
 
 app = FastAPI(title="Golf Journey API")
 app.add_middleware(
@@ -526,14 +527,37 @@ class PostBody(BaseModel):
     body: str = ""
     shared_item_type: str | None = None
     shared_item_id: int | None = None
+    photo_url: str | None = None
 
 
 @app.post("/feed/posts")
 def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)):
     try:
-        return create_post(user_id, body.body, body.shared_item_type, body.shared_item_id)
+        return create_post(
+            user_id, body.body, body.shared_item_type, body.shared_item_id, body.photo_url
+        )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
+
+
+@app.post("/feed/posts/photo")
+async def upload_post_photo(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    contents = await file.read()
+    extension = (file.filename or "").rsplit(".", 1)[-1].lower() or "jpg"
+    path = f"{user_id}/{uuid.uuid4().hex}.{extension}"
+
+    supabase.storage.from_(POST_PHOTOS_BUCKET).upload(
+        path,
+        contents,
+        {"content-type": file.content_type or "image/jpeg"},
+    )
+
+    photo_url = supabase.storage.from_(POST_PHOTOS_BUCKET).get_public_url(path)
+
+    return {"photo_url": photo_url}
 
 
 @app.get("/feed/{item_type}/{item_id}/comments")

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { API, authFetch } from "./api";
+import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
 
 type ReactionSummary = {
@@ -15,6 +15,7 @@ type SharedItem = {
     player_name: string;
     posted_at: string;
     body: string | null;
+    photo_url: string | null;
     course_name: string | null;
     course_photo_url: string | null;
     adjusted_gross: number | null;
@@ -28,6 +29,7 @@ type FeedItem = {
     player_name: string;
     posted_at: string;
     body: string | null;
+    photo_url: string | null;
     shared_item: SharedItem | null;
     adjusted_gross: number | null;
     stableford_points: number | null;
@@ -168,6 +170,9 @@ function FeedPage() {
     const [reactionPickerOpen, setReactionPickerOpen] = useState<string | null>(null);
     const [shareMenuOpen, setShareMenuOpen] = useState<string | null>(null);
     const [shareTarget, setShareTarget] = useState<FeedItem | null>(null);
+
+    const [postPhotoUrl, setPostPhotoUrl] = useState<string | null>(null);
+    const [postPhotoUploading, setPostPhotoUploading] = useState(false);
 
     async function loadComments(key: string, itemType: string, itemId: number) {
         setCommentsLoading((prev) => new Set(prev).add(key));
@@ -358,10 +363,25 @@ function FeedPage() {
         }
     }
 
+    async function handlePostPhotoSelect(file: File | undefined) {
+        if (!file) return;
+
+        setPostPhotoUploading(true);
+
+        try {
+            const { photo_url } = await uploadPostPhoto(file);
+            setPostPhotoUrl(photo_url);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setPostPhotoUploading(false);
+        }
+    }
+
     async function handleSubmitPost(event: FormEvent) {
         event.preventDefault();
         const body = (drafts[NEW_POST_KEY] || "").trim();
-        if (!body && !shareTarget) return;
+        if (!body && !postPhotoUrl && !shareTarget) return;
 
         setPosting((prev) => new Set(prev).add(NEW_POST_KEY));
 
@@ -371,6 +391,7 @@ function FeedPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     body,
+                    photo_url: postPhotoUrl,
                     shared_item_type: shareTarget?.item_type ?? null,
                     shared_item_id: shareTarget?.item_id ?? null,
                 }),
@@ -378,6 +399,7 @@ function FeedPage() {
 
             if (response.ok) {
                 setDrafts((prev) => ({ ...prev, [NEW_POST_KEY]: "" }));
+                setPostPhotoUrl(null);
                 setShareTarget(null);
                 setEmojiPickerOpen(null);
                 await loadFeed();
@@ -556,6 +578,15 @@ function FeedPage() {
                         </div>
                     )}
 
+                    {postPhotoUrl && (
+                        <div className="post-photo-preview">
+                            <img src={postPhotoUrl} alt="" />
+                            <button type="button" onClick={() => setPostPhotoUrl(null)}>
+                                ✕
+                            </button>
+                        </div>
+                    )}
+
                     <form className="feed-comment-form" onSubmit={handleSubmitPost}>
                         <div className="feed-comment-input-wrap">
                             <input
@@ -579,6 +610,18 @@ function FeedPage() {
                                 </div>
                             )}
                         </div>
+
+                        <label className="emoji-toggle photo-upload-button">
+                            {postPhotoUploading ? "..." : "📷"}
+                            <input
+                                type="file"
+                                accept="image/*"
+                                hidden
+                                onChange={(event) =>
+                                    handlePostPhotoSelect(event.target.files?.[0])
+                                }
+                            />
+                        </label>
 
                         <div className="feed-comment-emoji-wrap">
                             <button
@@ -604,7 +647,11 @@ function FeedPage() {
                             )}
                         </div>
 
-                        <button className="sync-button" type="submit" disabled={posting.has(NEW_POST_KEY)}>
+                        <button
+                            className="sync-button"
+                            type="submit"
+                            disabled={posting.has(NEW_POST_KEY) || postPhotoUploading}
+                        >
                             {posting.has(NEW_POST_KEY) ? "Posting..." : "Post"}
                         </button>
                     </form>
@@ -634,6 +681,10 @@ function FeedPage() {
 
                                 {item.body && <p className="feed-post-body">{renderBody(item.body)}</p>}
 
+                                {item.photo_url && (
+                                    <img src={item.photo_url} alt="" className="feed-card-photo" />
+                                )}
+
                                 {item.shared_item && (
                                     <div className="feed-shared-item">
                                         <div className="feed-card-header">
@@ -648,6 +699,14 @@ function FeedPage() {
 
                                         {item.shared_item.body && (
                                             <p className="feed-post-body">{renderBody(item.shared_item.body)}</p>
+                                        )}
+
+                                        {item.shared_item.photo_url && (
+                                            <img
+                                                src={item.shared_item.photo_url}
+                                                alt=""
+                                                className="feed-card-photo"
+                                            />
                                         )}
 
                                         {item.shared_item.course_photo_url && (

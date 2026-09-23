@@ -32,6 +32,22 @@ export async function uploadCoursePhoto(courseId: number, file: File) {
     return (await response.json()) as { photo_url: string };
 }
 
+export async function uploadPostPhoto(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await authFetch(`${API}/feed/posts/photo`, {
+        method: "POST",
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to upload photo");
+    }
+
+    return (await response.json()) as { photo_url: string };
+}
+
 export function courseMarkerIcon(course: {
     name: string;
     photo_url?: string | null;

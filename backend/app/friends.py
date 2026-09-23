@@ -426,6 +426,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             "player_name": _display_name(profile),
             "posted_at": score["play_date"],
             "body": None,
+            "photo_url": None,
             "course_name": course.get("name") or score.get("course_name"),
             "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
             "adjusted_gross": score.get("adjusted_gross"),
@@ -433,7 +434,14 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
         }
 
     if item_type == "post":
-        response = supabase.table("posts").select("id,user_id,body,created_at").eq("id", item_id).limit(1).execute()
+        response = (
+            supabase
+            .table("posts")
+            .select("id,user_id,body,photo_url,created_at")
+            .eq("id", item_id)
+            .limit(1)
+            .execute()
+        )
 
         if not response.data:
             return None
@@ -450,6 +458,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             "player_name": _display_name(profile),
             "posted_at": post["created_at"],
             "body": post["body"],
+            "photo_url": post.get("photo_url"),
             "course_name": None,
             "course_photo_url": None,
             "adjusted_gross": None,
@@ -512,6 +521,7 @@ def _build_rounds_feed(viewer_id: str, user_ids: list[str], limit: int) -> list[
             "player_name": _display_name(profile_by_user.get(score["user_id"])),
             "posted_at": score["play_date"],
             "body": None,
+            "photo_url": None,
             "shared_item": None,
             "adjusted_gross": score.get("adjusted_gross"),
             "stableford_points": score.get("stableford_points"),
@@ -540,16 +550,17 @@ def create_post(
     body: str,
     shared_item_type: str | None = None,
     shared_item_id: int | None = None,
+    photo_url: str | None = None,
 ) -> dict:
     body = body.strip()
 
-    if not body and not (shared_item_type and shared_item_id):
+    if not body and not photo_url and not (shared_item_type and shared_item_id):
         raise ValueError("Post can't be empty")
 
     if len(body) > 2000:
         raise ValueError("Post is too long")
 
-    row = {"user_id": user_id, "body": body}
+    row = {"user_id": user_id, "body": body, "photo_url": photo_url}
 
     if shared_item_type and shared_item_id:
         if shared_item_type not in ("round", "post"):
@@ -576,7 +587,7 @@ def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
     posts_response = (
         supabase
         .table("posts")
-        .select("id,user_id,body,shared_item_type,shared_item_id,created_at")
+        .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at")
         .in_("user_id", circle_ids)
         .order("created_at", desc=True)
         .limit(limit)
@@ -608,6 +619,7 @@ def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
                 "player_name": _display_name(profile_by_user.get(post["user_id"])),
                 "posted_at": post["created_at"],
                 "body": post["body"],
+                "photo_url": post.get("photo_url"),
                 "shared_item": shared_item,
                 "adjusted_gross": None,
                 "stableford_points": None,
