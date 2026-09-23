@@ -16,9 +16,80 @@ export async function authFetch(url: string, options: RequestInit = {}) {
     });
 }
 
+// A phone camera photo straight off the device is often 5-10MB, and it has
+// to travel twice (browser -> our backend -> Supabase Storage). Downscaling
+// and re-compressing client-side before upload cuts that dramatically --
+// there's no reason to ship a 4000px-wide photo for a card that displays at
+// a few hundred px.
+function compressImage(file: File, maxDimension = 1600, quality = 0.82): Promise<File> {
+    return new Promise((resolve) => {
+        if (!file.type.startsWith("image/") || file.type === "image/gif") {
+            resolve(file);
+            return;
+        }
+
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+
+            let { width, height } = img;
+
+            if (width > maxDimension || height > maxDimension) {
+                if (width > height) {
+                    height = Math.round((height * maxDimension) / width);
+                    width = maxDimension;
+                } else {
+                    width = Math.round((width * maxDimension) / height);
+                    height = maxDimension;
+                }
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+
+            if (!ctx) {
+                resolve(file);
+                return;
+            }
+
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob || blob.size >= file.size) {
+                        resolve(file);
+                        return;
+                    }
+
+                    resolve(
+                        new File([blob], file.name.replace(/\.\w+$/, ".jpg"), {
+                            type: "image/jpeg",
+                        })
+                    );
+                },
+                "image/jpeg",
+                quality
+            );
+        };
+
+        img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(file);
+        };
+
+        img.src = objectUrl;
+    });
+}
+
 export async function uploadCoursePhoto(courseId: number, file: File) {
+    const compressed = await compressImage(file);
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", compressed);
 
     const response = await authFetch(`${API}/courses/${courseId}/photo`, {
         method: "POST",
@@ -33,8 +104,10 @@ export async function uploadCoursePhoto(courseId: number, file: File) {
 }
 
 export async function uploadPostPhoto(file: File) {
+    const compressed = await compressImage(file);
+
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", compressed);
 
     const response = await authFetch(`${API}/feed/posts/photo`, {
         method: "POST",
