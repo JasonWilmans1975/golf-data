@@ -14,6 +14,8 @@ import {
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
 import BrandLogo from "./BrandLogo";
+import NavButton from "./NavButton";
+import FeedNavButton from "./FeedNavButton";
 import { useTheme } from "./useTheme";
 
 const CHART_PALETTES = {
@@ -167,58 +169,17 @@ function StatsPage() {
             <header className="topbar">
                 <div>
                     <BrandLogo />
-                    <h1>Golf Statistics</h1>
                 </div>
 
                 <TopbarActions>
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/")}
-                    >
-                        Home
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/rounds")}
-                    >
-                        My Rounds
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/map")}
-                    >
-                        World Map
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/handicap")}
-                    >
-                        Handicap
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/wellness")}
-                    >
-                        Wellness
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/teesheet")}
-                    >
-                        Teesheet
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/settings")}
-                    >
-                        Settings
-                    </button>
+                    <NavButton to="/rounds">My Rounds</NavButton>
+                    <NavButton to="/map">World Map</NavButton>
+                    <NavButton to="/stats">Stats</NavButton>
+                    <NavButton to="/handicap">Handicap</NavButton>
+                    <NavButton to="/wellness">Wellness</NavButton>
+                    <NavButton to="/teesheet">Teesheet</NavButton>
+                    <FeedNavButton />
+                    <NavButton to="/settings">Settings</NavButton>
                 </TopbarActions>
             </header>
 

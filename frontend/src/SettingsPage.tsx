@@ -5,6 +5,7 @@ import { supabase } from "./supabaseClient";
 import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
 import BrandLogo from "./BrandLogo";
+import NavButton from "./NavButton";
 import FeedNavButton from "./FeedNavButton";
 import { TEESHEET_CLUBS } from "./teesheetClubs";
 
@@ -366,39 +367,17 @@ function SettingsPage() {
             <header className="topbar">
                 <div>
                     <BrandLogo />
-                    <h1>Settings</h1>
                 </div>
 
                 <TopbarActions>
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/")}
-                    >
-                        Home
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/rounds")}
-                    >
-                        My Rounds
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/wellness")}
-                    >
-                        Wellness
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/teesheet")}
-                    >
-                        Teesheet
-                    </button>
-
+                    <NavButton to="/rounds">My Rounds</NavButton>
+                    <NavButton to="/map">World Map</NavButton>
+                    <NavButton to="/stats">Stats</NavButton>
+                    <NavButton to="/handicap">Handicap</NavButton>
+                    <NavButton to="/wellness">Wellness</NavButton>
+                    <NavButton to="/teesheet">Teesheet</NavButton>
                     <FeedNavButton />
+                    <NavButton to="/settings">Settings</NavButton>
 
                     <button className="header-secondary-button" onClick={handleLogout}>
                         Log out

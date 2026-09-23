@@ -14,6 +14,7 @@ import "leaflet/dist/leaflet.css";
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
 import TopbarActions from "./TopbarActions";
 import BrandLogo from "./BrandLogo";
+import NavButton from "./NavButton";
 import FeedNavButton from "./FeedNavButton";
 
 type Course = {
@@ -159,61 +160,17 @@ function MapPage() {
             <header className="topbar">
                 <div>
                     <BrandLogo />
-
-                    <h1>World Map</h1>
                 </div>
 
                 <TopbarActions>
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/")}
-                    >
-                        Home
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/rounds")}
-                    >
-                        My Rounds
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/stats")}
-                    >
-                        Stats
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/handicap")}
-                    >
-                        Handicap
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/wellness")}
-                    >
-                        Wellness
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/teesheet")}
-                    >
-                        Teesheet
-                    </button>
-
+                    <NavButton to="/rounds">My Rounds</NavButton>
+                    <NavButton to="/map">World Map</NavButton>
+                    <NavButton to="/stats">Stats</NavButton>
+                    <NavButton to="/handicap">Handicap</NavButton>
+                    <NavButton to="/wellness">Wellness</NavButton>
+                    <NavButton to="/teesheet">Teesheet</NavButton>
                     <FeedNavButton />
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/settings")}
-                    >
-                        Settings
-                    </button>
+                    <NavButton to="/settings">Settings</NavButton>
                 </TopbarActions>
             </header>
 

@@ -17,6 +17,7 @@ import TeesheetPage from "./TeesheetPage";
 import FriendsPage from "./FriendsPage";
 import FeedPage from "./FeedPage";
 import FeedNavButton from "./FeedNavButton";
+import NavButton from "./NavButton";
 import LoginPage from "./LoginPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -274,61 +275,17 @@ function Dashboard() {
             <header className="topbar">
                 <div>
                     <BrandLogo />
-
-                    <h1>My Rounds</h1>
                 </div>
 
                 <TopbarActions>
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/")}
-                    >
-                        Home
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/map")}
-                    >
-                        World Map
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/stats")}
-                    >
-                        Stats
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/handicap")}
-                    >
-                        Handicap
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/wellness")}
-                    >
-                        Wellness
-                    </button>
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/teesheet")}
-                    >
-                        Teesheet
-                    </button>
-
+                    <NavButton to="/rounds">My Rounds</NavButton>
+                    <NavButton to="/map">World Map</NavButton>
+                    <NavButton to="/stats">Stats</NavButton>
+                    <NavButton to="/handicap">Handicap</NavButton>
+                    <NavButton to="/wellness">Wellness</NavButton>
+                    <NavButton to="/teesheet">Teesheet</NavButton>
                     <FeedNavButton />
-
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/settings")}
-                    >
-                        Settings
-                    </button>
+                    <NavButton to="/settings">Settings</NavButton>
                 </TopbarActions>
             </header>
 

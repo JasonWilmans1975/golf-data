@@ -149,6 +149,12 @@ button {
     border-color: white;
 }
 
+.header-secondary-button.active {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #53b9ff;
+    color: #53b9ff;
+}
+
 .sync-button {
     border: 0;
     background: var(--accent);
