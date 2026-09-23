@@ -242,6 +242,13 @@ function FeedPage() {
     }
 
     useEffect(() => {
+        // The Strava OAuth callback always lands on "/" -- bounce over to
+        // My Rounds so its existing sync-on-connect flow still runs there.
+        if (new URLSearchParams(window.location.search).get("connected") === "1") {
+            navigate("/rounds?connected=1", { replace: true });
+            return;
+        }
+
         Promise.all([loadFeed(), loadFriends()]).finally(() => setLoading(false));
         // Opening the Feed page counts as having seen what's new -- clears
         // the unread badge on the nav link.
@@ -253,6 +260,35 @@ function FeedPage() {
                 if (body?.display_name) setMyName(body.display_name);
             })
             .catch(() => {});
+
+        async function redirectFirstTimeUsers() {
+            try {
+                const [stravaRes, handicapRes, garminRes, teesheetRes] = await Promise.all([
+                    authFetch(`${API}/strava/status`),
+                    authFetch(`${API}/handicap/credentials/status`),
+                    authFetch(`${API}/garmin/credentials/status`),
+                    authFetch(`${API}/teesheet/credentials/status`),
+                ]);
+
+                const [strava, handicap, garmin, teesheet] = await Promise.all([
+                    stravaRes.json().catch(() => ({})),
+                    handicapRes.json().catch(() => ({})),
+                    garminRes.json().catch(() => ({})),
+                    teesheetRes.json().catch(() => ({})),
+                ]);
+
+                const hasAnyConnection =
+                    strava.connected || handicap.connected || garmin.connected || teesheet.connected;
+
+                if (!hasAnyConnection) {
+                    navigate("/settings", { replace: true });
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        redirectFirstTimeUsers();
     }, []);
 
     function handleDraftChange(key: string, value: string) {
@@ -572,6 +608,10 @@ function FeedPage() {
                 <TopbarActions>
                     <button className="header-secondary-button" onClick={() => navigate("/")}>
                         Home
+                    </button>
+
+                    <button className="header-secondary-button" onClick={() => navigate("/rounds")}>
+                        My Rounds
                     </button>
 
                     <button className="header-secondary-button" onClick={() => navigate("/map")}>

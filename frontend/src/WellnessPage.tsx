@@ -321,6 +321,13 @@ function WellnessPage() {
 
                     <button
                         className="header-secondary-button"
+                        onClick={() => navigate("/rounds")}
+                    >
+                        My Rounds
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
                         onClick={() => navigate("/stats")}
                     >
                         Stats

@@ -162,6 +162,10 @@ function FriendsPage() {
                         Home
                     </button>
 
+                    <button className="header-secondary-button" onClick={() => navigate("/rounds")}>
+                        My Rounds
+                    </button>
+
                     <button className="header-secondary-button" onClick={() => navigate("/map")}>
                         World Map
                     </button>

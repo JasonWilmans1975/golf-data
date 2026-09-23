@@ -254,43 +254,9 @@ function Dashboard() {
         loadDashboard();
 
         if (new URLSearchParams(window.location.search).get("connected") === "1") {
-            window.history.replaceState(null, "", "/");
+            window.history.replaceState(null, "", "/rounds");
             handleSync();
-            return;
         }
-
-        async function redirectFirstTimeUsers() {
-            try {
-                const [stravaRes, handicapRes, garminRes, teesheetRes] =
-                    await Promise.all([
-                        authFetch(`${API}/strava/status`),
-                        authFetch(`${API}/handicap/credentials/status`),
-                        authFetch(`${API}/garmin/credentials/status`),
-                        authFetch(`${API}/teesheet/credentials/status`),
-                    ]);
-
-                const [strava, handicap, garmin, teesheet] = await Promise.all([
-                    stravaRes.json().catch(() => ({})),
-                    handicapRes.json().catch(() => ({})),
-                    garminRes.json().catch(() => ({})),
-                    teesheetRes.json().catch(() => ({})),
-                ]);
-
-                const hasAnyConnection =
-                    strava.connected ||
-                    handicap.connected ||
-                    garmin.connected ||
-                    teesheet.connected;
-
-                if (!hasAnyConnection) {
-                    navigate("/settings", { replace: true });
-                }
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        redirectFirstTimeUsers();
     }, []);
 
     const totalRounds = useMemo(
@@ -314,6 +280,13 @@ function Dashboard() {
                 </div>
 
                 <TopbarActions>
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/")}
+                    >
+                        Home
+                    </button>
+
                     <button
                         className="header-secondary-button"
                         onClick={() => navigate("/map")}
@@ -1097,6 +1070,15 @@ function AppRoutes() {
 
             <Route
                 path="/"
+                element={
+                    <RequireAuth>
+                        <FeedPage />
+                    </RequireAuth>
+                }
+            />
+
+            <Route
+                path="/rounds"
                 element={
                     <RequireAuth>
                         <Dashboard />
