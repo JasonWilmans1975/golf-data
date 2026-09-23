@@ -250,3 +250,25 @@ create table if not exists public.friend_requests (
 
 create index if not exists friend_requests_to_user_idx on public.friend_requests(to_user_id);
 create index if not exists friend_requests_from_user_idx on public.friend_requests(from_user_id);
+
+-- Let the frontend subscribe directly to friend_requests over Supabase
+-- Realtime (instead of polling) so an accepted/declined/new request shows
+-- up immediately. This is the one table the frontend talks to directly
+-- (everything else stays behind the FastAPI backend + service role key),
+-- so it needs its own RLS policy -- Realtime only delivers a row to a
+-- subscriber if that row passes RLS for their JWT, otherwise every
+-- connected user would see every other user's friend requests.
+alter table public.friend_requests enable row level security;
+
+drop policy if exists "Users can view their own friend requests" on public.friend_requests;
+create policy "Users can view their own friend requests"
+on public.friend_requests
+for select
+using (auth.uid() = from_user_id or auth.uid() = to_user_id);
+
+do $$
+begin
+  alter publication supabase_realtime add table public.friend_requests;
+exception
+  when duplicate_object then null;
+end $$;

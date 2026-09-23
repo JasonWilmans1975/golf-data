@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
+import { supabase } from "./supabaseClient";
 import TopbarActions from "./TopbarActions";
 
 type Friend = {
@@ -70,11 +71,24 @@ function FriendsPage() {
     useEffect(() => {
         loadData().finally(() => setLoading(false));
 
-        // Pick up newly-accepted requests (or new incoming ones) without
-        // requiring a manual refresh -- there's no realtime channel wired
-        // up yet, so a light poll stands in for one.
-        const interval = setInterval(loadData, 15000);
-        return () => clearInterval(interval);
+        // Pick up newly-accepted requests (or new incoming ones) instantly
+        // via Supabase Realtime instead of polling. friend_requests has an
+        // RLS policy scoped to auth.uid(), so this only ever delivers rows
+        // that involve the logged-in user.
+        const channel = supabase
+            .channel("friend-requests-changes")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "friend_requests" },
+                () => {
+                    loadData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     async function handleSendRequest(event: FormEvent) {
