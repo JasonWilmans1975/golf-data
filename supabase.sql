@@ -433,3 +433,17 @@ begin
 exception
   when duplicate_object then null;
 end $$;
+
+-- Milestone badges (rounds/courses/countries played, personal bests),
+-- auto-posted to the Feed once each. badge_key embeds the achieved value
+-- for personal-best badges (e.g. "best_gross_74") so a new best always gets
+-- a fresh key, while a repeat sync of the same data is a no-op.
+create table if not exists public.milestones (
+  id bigint generated always as identity primary key,
+  user_id uuid not null,
+  badge_key text not null,
+  achieved_at timestamptz default now(),
+  unique (user_id, badge_key)
+);
+
+create index if not exists milestones_user_id_idx on public.milestones(user_id);

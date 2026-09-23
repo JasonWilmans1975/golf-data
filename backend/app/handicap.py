@@ -7,6 +7,7 @@ from playwright.async_api import async_playwright
 from .db import supabase
 from .courses import match_handicap_scores_to_courses
 from .crypto import encrypt, decrypt
+from .milestones import check_and_award_milestones
 
 HANDICAP_SITE_BASE_URL = "https://www.handicaps.co.za"
 
@@ -243,6 +244,9 @@ async def sync_handicap_data(user_id: str, force: bool = False):
     course_match = match_handicap_scores_to_courses(user_id)
 
     _mark_synced_now(user_id, data["current_index"])
+
+    if rows:
+        check_and_award_milestones(user_id)
 
     return {
         "skipped": False,
