@@ -51,7 +51,11 @@ function LoginPage() {
     return (
         <div className="auth-page">
             <div className="auth-card">
-                <img src="/logo-full.png" alt="GolfCircle" className="auth-logo" />
+                <img
+                    src={`${import.meta.env.BASE_URL}logo-full.png`}
+                    alt="GolfCircle"
+                    className="auth-logo"
+                />
                 <h1>{mode === "signin" ? "Sign in" : "Create account"}</h1>
 
                 {signupDone ? (
