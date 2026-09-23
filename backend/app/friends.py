@@ -407,7 +407,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             course_response = (
                 supabase
                 .table("courses")
-                .select("name,photo_url,google_photo_url")
+                .select("name,photo_url,google_photo_url,phone_number")
                 .eq("id", score["course_id"])
                 .limit(1)
                 .execute()
@@ -429,6 +429,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             "photo_url": None,
             "course_name": course.get("name") or score.get("course_name"),
             "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
+            "course_phone": course.get("phone_number"),
             "adjusted_gross": score.get("adjusted_gross"),
             "stableford_points": score.get("stableford_points"),
         }
@@ -461,6 +462,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             "photo_url": post.get("photo_url"),
             "course_name": None,
             "course_photo_url": None,
+            "course_phone": None,
             "adjusted_gross": None,
             "stableford_points": None,
         }
@@ -502,7 +504,7 @@ def _build_rounds_feed(viewer_id: str, user_ids: list[str], limit: int) -> list[
         courses_response = (
             supabase
             .table("courses")
-            .select("id,name,photo_url,google_photo_url,city,country_name")
+            .select("id,name,photo_url,google_photo_url,city,country_name,phone_number")
             .in_("id", list(set(course_ids)))
             .execute()
         )
@@ -527,6 +529,7 @@ def _build_rounds_feed(viewer_id: str, user_ids: list[str], limit: int) -> list[
             "stableford_points": score.get("stableford_points"),
             "course_name": course.get("name") or score.get("course_name"),
             "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
+            "course_phone": course.get("phone_number"),
             "country_name": score.get("country_name") or course.get("country_name"),
             "country_flag_url": score.get("country_flag_url"),
             "comment_count": comment_counts.get(("round", score["score_id"]), 0),
@@ -625,6 +628,7 @@ def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
                 "stableford_points": None,
                 "course_name": None,
                 "course_photo_url": None,
+                "course_phone": None,
                 "country_name": None,
                 "country_flag_url": None,
                 "comment_count": comment_counts.get(("post", post["id"]), 0),
@@ -737,3 +741,76 @@ def delete_comment(user_id: str, comment_id: int) -> None:
         raise ValueError("Comment not found")
 
     supabase.table("feed_comments").delete().eq("id", comment_id).execute()
+
+
+def get_notification_summary(user_id: str) -> dict:
+    """Lightweight, read-only check used for the Feed nav badge: has
+    anything happened (a like on something of mine, or a mention of me)
+    since I last opened the Feed page. Not a full notifications inbox --
+    just enough to tell the user "there's something new"."""
+    profile_response = (
+        supabase
+        .table("profiles")
+        .select("notifications_checked_at,display_name,email")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    profile = profile_response.data[0] if profile_response.data else {}
+    since = profile.get("notifications_checked_at") or "1970-01-01T00:00:00Z"
+
+    my_round_ids = [
+        row["score_id"]
+        for row in fetch_all(
+            lambda: supabase.table("handicap_scores").select("score_id").eq("user_id", user_id).order("id")
+        )
+    ]
+    my_post_ids = [
+        row["id"] for row in (supabase.table("posts").select("id").eq("user_id", user_id).execute().data or [])
+    ]
+    my_comment_ids = [
+        row["id"]
+        for row in (supabase.table("feed_comments").select("id").eq("user_id", user_id).execute().data or [])
+    ]
+
+    for item_type, ids in (("round", my_round_ids), ("post", my_post_ids), ("comment", my_comment_ids)):
+        if not ids:
+            continue
+
+        response = (
+            supabase
+            .table("feed_likes")
+            .select("id")
+            .eq("item_type", item_type)
+            .in_("item_id", ids)
+            .neq("user_id", user_id)
+            .gt("created_at", since)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data:
+            return {"has_unread": True}
+
+    display_name = _display_name(profile)
+
+    for table in ("posts", "feed_comments"):
+        response = (
+            supabase
+            .table(table)
+            .select("id")
+            .ilike("body", f"%@{display_name}%")
+            .neq("user_id", user_id)
+            .gt("created_at", since)
+            .limit(1)
+            .execute()
+        )
+
+        if response.data:
+            return {"has_unread": True}
+
+    return {"has_unread": False}
+
+
+def acknowledge_notifications(user_id: str) -> None:
+    supabase.table("profiles").update({"notifications_checked_at": _now()}).eq("user_id", user_id).execute()

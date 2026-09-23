@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
@@ -18,6 +18,7 @@ type SharedItem = {
     photo_url: string | null;
     course_name: string | null;
     course_photo_url: string | null;
+    course_phone: string | null;
     adjusted_gross: number | null;
     stableford_points: number | null;
 };
@@ -35,6 +36,7 @@ type FeedItem = {
     stableford_points: number | null;
     course_name: string | null;
     course_photo_url: string | null;
+    course_phone: string | null;
     country_name: string | null;
     country_flag_url: string | null;
     comment_count: number;
@@ -132,6 +134,20 @@ function shareToFacebook(item: FeedItem) {
     window.open(url, "_blank");
 }
 
+function reactionSummary(reactions: ReactionSummary) {
+    if (reactions.total === 0) return null;
+
+    return (
+        <span className="reaction-summary-inline">
+            {Object.entries(reactions.counts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([reaction]) => REACTION_EMOJI[reaction])
+                .join("")}{" "}
+            {reactions.total}
+        </span>
+    );
+}
+
 function applyReaction(
     current: ReactionSummary,
     previousMine: string | null,
@@ -158,6 +174,7 @@ function FeedPage() {
 
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [friends, setFriends] = useState<Friend[]>([]);
+    const [myName, setMyName] = useState("");
     const [loading, setLoading] = useState(true);
 
     const [comments, setComments] = useState<Record<string, Comment[]>>({});
@@ -173,6 +190,12 @@ function FeedPage() {
 
     const [postPhotoUrl, setPostPhotoUrl] = useState<string | null>(null);
     const [postPhotoUploading, setPostPhotoUploading] = useState(false);
+
+    const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+    function focusCommentInput(key: string) {
+        commentInputRefs.current[key]?.focus();
+    }
 
     async function loadComments(key: string, itemType: string, itemId: number) {
         setCommentsLoading((prev) => new Set(prev).add(key));
@@ -220,6 +243,16 @@ function FeedPage() {
 
     useEffect(() => {
         Promise.all([loadFeed(), loadFriends()]).finally(() => setLoading(false));
+        // Opening the Feed page counts as having seen what's new -- clears
+        // the unread badge on the nav link.
+        authFetch(`${API}/notifications/ack`, { method: "POST" }).catch(() => {});
+
+        authFetch(`${API}/profile`)
+            .then((response) => (response.ok ? response.json() : null))
+            .then((body) => {
+                if (body?.display_name) setMyName(body.display_name);
+            })
+            .catch(() => {});
     }, []);
 
     function handleDraftChange(key: string, value: string) {
@@ -437,21 +470,11 @@ function FeedPage() {
             >
                 <button
                     type="button"
-                    className={`reaction-like-button${reactions.my_reaction ? " active" : ""}`}
+                    className={`feed-action-button${reactions.my_reaction ? " active" : ""}`}
                     onClick={() => react(itemType, itemId, "like")}
                 >
                     {activeEmoji || "👍"} {reactions.my_reaction ? "Liked" : "Like"}
                 </button>
-
-                {reactions.total > 0 && (
-                    <span className="reaction-summary">
-                        {Object.entries(reactions.counts)
-                            .sort((a, b) => b[1] - a[1])
-                            .map(([reaction]) => REACTION_EMOJI[reaction])
-                            .join("")}{" "}
-                        {reactions.total}
-                    </span>
-                )}
 
                 {reactionPickerOpen === key && (
                     <div className="reaction-picker">
@@ -482,6 +505,9 @@ function FeedPage() {
             >
                 <div className="feed-comment-input-wrap">
                     <input
+                        ref={(el) => {
+                            commentInputRefs.current[key] = el;
+                        }}
                         className="settings-input"
                         placeholder="Write a comment... @ to mention a friend"
                         value={drafts[key] || ""}
@@ -568,6 +594,7 @@ function FeedPage() {
                     <p>Your rounds and your friends', newest first.</p>
                 </section>
 
+                <div className="feed-container">
                 <div className="feed-card">
                     {shareTarget && (
                         <div className="feed-share-preview">
@@ -588,10 +615,12 @@ function FeedPage() {
                     )}
 
                     <form className="feed-comment-form" onSubmit={handleSubmitPost}>
+                        <div className="feed-avatar feed-avatar-small">{initials(myName || "?")}</div>
+
                         <div className="feed-comment-input-wrap">
                             <input
-                                className="settings-input"
-                                placeholder="Share something with your friends..."
+                                className="settings-input feed-composer-input"
+                                placeholder={`What's on your mind${myName ? `, ${myName}` : ""}?`}
                                 value={drafts[NEW_POST_KEY] || ""}
                                 onChange={(event) => handleDraftChange(NEW_POST_KEY, event.target.value)}
                             />
@@ -737,6 +766,16 @@ function FeedPage() {
                                                 </div>
                                             </div>
                                         )}
+
+                                        {item.shared_item.item_type === "round" &&
+                                            item.shared_item.course_phone && (
+                                                <a
+                                                    className="book-round-button"
+                                                    href={`tel:${item.shared_item.course_phone}`}
+                                                >
+                                                    📞 Book a round
+                                                </a>
+                                            )}
                                     </div>
                                 )}
 
@@ -778,6 +817,24 @@ function FeedPage() {
                                     </div>
                                 )}
 
+                                {!item.shared_item && item.item_type === "round" && item.course_phone && (
+                                    <a className="book-round-button" href={`tel:${item.course_phone}`}>
+                                        📞 Book a round
+                                    </a>
+                                )}
+
+                                <div className="feed-meta-row">
+                                    {reactionSummary(item.reactions) || <span />}
+
+                                    <span className="feed-comment-count">
+                                        {item.comment_count === 0
+                                            ? "No comments yet"
+                                            : `${item.comment_count} ${
+                                                  item.comment_count === 1 ? "comment" : "comments"
+                                              }`}
+                                    </span>
+                                </div>
+
                                 <div className="feed-actions-row">
                                     <ReactionBar
                                         itemType={item.item_type}
@@ -785,15 +842,23 @@ function FeedPage() {
                                         reactions={item.reactions}
                                     />
 
+                                    <button
+                                        type="button"
+                                        className="feed-action-button"
+                                        onClick={() => focusCommentInput(key)}
+                                    >
+                                        💬 Comment
+                                    </button>
+
                                     <div className="feed-share-wrap">
                                         <button
                                             type="button"
-                                            className="feed-comment-toggle"
+                                            className="feed-action-button"
                                             onClick={() =>
                                                 setShareMenuOpen((prev) => (prev === key ? null : key))
                                             }
                                         >
-                                            Share
+                                            ↗ Share
                                         </button>
 
                                         {shareMenuOpen === key && (
@@ -813,29 +878,31 @@ function FeedPage() {
                                 </div>
 
                                 <div className="feed-card-footer">
-                                    <span className="feed-comment-count">
-                                        {item.comment_count === 0
-                                            ? "No comments yet"
-                                            : `${item.comment_count} ${
-                                                  item.comment_count === 1 ? "comment" : "comments"
-                                              }`}
-                                    </span>
-
                                     <div className="feed-comments">
                                         {commentsLoading.has(key) && itemComments.length === 0 ? (
                                             <span className="course-count">Loading comments...</span>
                                         ) : (
                                             itemComments.map((comment) => (
-                                                <div className="feed-comment" key={comment.id}>
-                                                    <strong>{comment.author_name}</strong>
-                                                    <span>{formatDateTime(comment.created_at)}</span>
-                                                    <p>{renderBody(comment.body)}</p>
+                                                <div className="feed-comment-row" key={comment.id}>
+                                                    <div className="feed-avatar feed-avatar-small">
+                                                        {initials(comment.author_name)}
+                                                    </div>
 
-                                                    <ReactionBar
-                                                        itemType="comment"
-                                                        itemId={comment.id}
-                                                        reactions={comment.reactions}
-                                                    />
+                                                    <div className="feed-comment-bubble-wrap">
+                                                        <div className="feed-comment-bubble">
+                                                            <strong>{comment.author_name}</strong>
+                                                            <p>{renderBody(comment.body)}</p>
+                                                        </div>
+
+                                                        <div className="feed-comment-meta">
+                                                            <span>{formatDateTime(comment.created_at)}</span>
+                                                            <ReactionBar
+                                                                itemType="comment"
+                                                                itemId={comment.id}
+                                                                reactions={comment.reactions}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             ))
                                         )}
@@ -847,6 +914,7 @@ function FeedPage() {
                         );
                     })
                 )}
+                </div>
             </main>
         </>
     );

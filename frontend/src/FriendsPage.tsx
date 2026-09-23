@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 import TopbarActions from "./TopbarActions";
+import FeedNavButton from "./FeedNavButton";
 
 type Friend = {
     user_id: string;
@@ -177,9 +178,7 @@ function FriendsPage() {
                         Teesheet
                     </button>
 
-                    <button className="header-secondary-button" onClick={() => navigate("/feed")}>
-                        Feed
-                    </button>
+                    <FeedNavButton />
 
                     <button className="header-secondary-button" onClick={() => navigate("/settings")}>
                         Settings

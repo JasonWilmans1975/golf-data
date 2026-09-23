@@ -13,6 +13,7 @@ import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
 import TopbarActions from "./TopbarActions";
+import FeedNavButton from "./FeedNavButton";
 
 type Course = {
     id: number;
@@ -199,12 +200,7 @@ function MapPage() {
                         Teesheet
                     </button>
 
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/feed")}
-                    >
-                        Feed
-                    </button>
+                    <FeedNavButton />
 
                     <button
                         className="header-secondary-button"

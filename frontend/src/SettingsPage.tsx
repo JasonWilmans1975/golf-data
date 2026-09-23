@@ -4,6 +4,7 @@ import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
+import FeedNavButton from "./FeedNavButton";
 import { TEESHEET_CLUBS } from "./teesheetClubs";
 
 function SettingsPage() {
@@ -389,12 +390,7 @@ function SettingsPage() {
                         Teesheet
                     </button>
 
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/feed")}
-                    >
-                        Feed
-                    </button>
+                    <FeedNavButton />
 
                     <button
                         className="header-secondary-button"

@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
+import FeedNavButton from "./FeedNavButton";
 import { useTheme } from "./useTheme";
 
 const CHART_PALETTES = {
@@ -245,12 +246,7 @@ function HandicapPage() {
                         Teesheet
                     </button>
 
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/feed")}
-                    >
-                        Feed
-                    </button>
+                    <FeedNavButton />
 
                     <button
                         className="header-secondary-button"

@@ -16,6 +16,7 @@ import WellnessPage from "./WellnessPage";
 import TeesheetPage from "./TeesheetPage";
 import FriendsPage from "./FriendsPage";
 import FeedPage from "./FeedPage";
+import FeedNavButton from "./FeedNavButton";
 import LoginPage from "./LoginPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -348,12 +349,7 @@ function Dashboard() {
                         Teesheet
                     </button>
 
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/feed")}
-                    >
-                        Feed
-                    </button>
+                    <FeedNavButton />
 
                     <button
                         className="header-secondary-button"

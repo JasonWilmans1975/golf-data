@@ -325,3 +325,7 @@ alter table if exists public.posts add column if not exists photo_url text;
 insert into storage.buckets (id, name, public)
 values ('post-photos', 'post-photos', true)
 on conflict (id) do nothing;
+
+-- Lightweight unread marker for the Feed nav badge (a like on something of
+-- mine, or a mention of me, since I last opened the Feed page).
+alter table if exists public.profiles add column if not exists notifications_checked_at timestamptz;

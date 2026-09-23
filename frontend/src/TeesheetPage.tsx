@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
+import FeedNavButton from "./FeedNavButton";
 
 type Booking = {
     id: number;
@@ -156,12 +157,7 @@ function TeesheetPage() {
                         Wellness
                     </button>
 
-                    <button
-                        className="header-secondary-button"
-                        onClick={() => navigate("/feed")}
-                    >
-                        Feed
-                    </button>
+                    <FeedNavButton />
 
                     <button
                         className="header-secondary-button"
