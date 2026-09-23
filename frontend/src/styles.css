@@ -103,6 +103,7 @@ button {
     display: flex;
     align-items: center;
     gap: 6px;
+    color: white;
 }
 
 .brand-logo-icon {
