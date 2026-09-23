@@ -463,17 +463,22 @@ function FeedPage() {
         const activeEmoji = reactions.my_reaction ? REACTION_EMOJI[reactions.my_reaction] : null;
 
         return (
-            <div
-                className="reaction-bar"
-                onMouseEnter={() => setReactionPickerOpen(key)}
-                onMouseLeave={() => setReactionPickerOpen(null)}
-            >
+            <div className="reaction-bar">
                 <button
                     type="button"
                     className={`feed-action-button${reactions.my_reaction ? " active" : ""}`}
                     onClick={() => react(itemType, itemId, "like")}
                 >
                     {activeEmoji || "👍"} {reactions.my_reaction ? "Liked" : "Like"}
+                </button>
+
+                <button
+                    type="button"
+                    className="reaction-picker-toggle"
+                    aria-label="Choose a reaction"
+                    onClick={() => setReactionPickerOpen((prev) => (prev === key ? null : key))}
+                >
+                    ▾
                 </button>
 
                 {reactionPickerOpen === key && (
@@ -854,11 +859,26 @@ function FeedPage() {
                                         <button
                                             type="button"
                                             className="feed-action-button"
+                                            aria-label="Share"
                                             onClick={() =>
                                                 setShareMenuOpen((prev) => (prev === key ? null : key))
                                             }
                                         >
-                                            ↗ Share
+                                            <svg
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            >
+                                                <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+                                                <path d="M16 6l-4-4-4 4" />
+                                                <path d="M12 2v14" />
+                                            </svg>
+                                            Share
                                         </button>
 
                                         {shareMenuOpen === key && (

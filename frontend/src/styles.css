@@ -849,8 +849,8 @@ button {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: var(--accent);
-    color: var(--accent-text);
+    background: #2e8b47;
+    color: #ffffff;
     border: none;
     border-radius: 6px;
     padding: 8px 14px;
@@ -864,7 +864,7 @@ button {
 }
 
 .book-round-button:hover {
-    background: var(--accent-bright);
+    background: #359951;
 }
 
 .feed-comments {
@@ -1118,6 +1118,22 @@ button {
     position: relative;
     flex: 1;
     display: flex;
+    align-items: stretch;
+}
+
+.reaction-picker-toggle {
+    flex: 0 0 auto;
+    width: 28px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 11px;
+}
+
+.reaction-picker-toggle:hover {
+    background: var(--panel-2);
 }
 
 .reaction-summary {
