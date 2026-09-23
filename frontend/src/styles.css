@@ -1104,7 +1104,7 @@ button {
     display: flex;
     gap: 8px;
     margin-top: 12px;
-    align-items: flex-start;
+    align-items: center;
 }
 
 .feed-comment-input-wrap {
@@ -1115,6 +1115,7 @@ button {
 
 .feed-comment-input-wrap input {
     width: 100%;
+    margin-top: 0;
 }
 
 .mention-dropdown {
