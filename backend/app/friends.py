@@ -136,6 +136,56 @@ def list_incoming_requests(user_id: str) -> list[dict]:
     ]
 
 
+def list_sent_requests(user_id: str) -> list[dict]:
+    response = (
+        supabase
+        .table("friend_requests")
+        .select("id,to_user_id,created_at")
+        .eq("from_user_id", user_id)
+        .eq("status", "pending")
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    requests = response.data or []
+
+    if not requests:
+        return []
+
+    profiles_response = (
+        supabase
+        .table("profiles")
+        .select("user_id,display_name,email")
+        .in_("user_id", [row["to_user_id"] for row in requests])
+        .execute()
+    )
+    profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+
+    return [
+        {
+            "id": row["id"],
+            "to_user_id": row["to_user_id"],
+            "display_name": _display_name(profile_by_user.get(row["to_user_id"])),
+            "created_at": row["created_at"],
+        }
+        for row in requests
+    ]
+
+
+def cancel_sent_request(user_id: str, request_id: int) -> None:
+    response = supabase.table("friend_requests").select("id,from_user_id,status").eq("id", request_id).limit(1).execute()
+
+    if not response.data:
+        raise ValueError("Friend request not found")
+
+    row = response.data[0]
+
+    if row["from_user_id"] != user_id or row["status"] != "pending":
+        raise ValueError("Friend request not found")
+
+    supabase.table("friend_requests").delete().eq("id", request_id).execute()
+
+
 def respond_to_request(user_id: str, request_id: int, accept: bool) -> dict:
     response = supabase.table("friend_requests").select("*").eq("id", request_id).limit(1).execute()
 

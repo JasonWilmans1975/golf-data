@@ -34,6 +34,8 @@ from .friends import (
     update_display_name,
     send_friend_request,
     list_incoming_requests,
+    list_sent_requests,
+    cancel_sent_request,
     respond_to_request,
     list_friends,
     remove_friend,
@@ -487,6 +489,21 @@ def friends_send_request(body: FriendRequestBody, user_id: str = Depends(get_cur
 @app.get("/friends/requests")
 def friends_incoming_requests(user_id: str = Depends(get_current_user_id)):
     return list_incoming_requests(user_id)
+
+
+@app.get("/friends/requests/sent")
+def friends_sent_requests(user_id: str = Depends(get_current_user_id)):
+    return list_sent_requests(user_id)
+
+
+@app.delete("/friends/requests/{request_id}")
+def friends_cancel_request(request_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        cancel_sent_request(user_id, request_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+    return {"cancelled": True}
 
 
 @app.post("/friends/requests/{request_id}/accept")

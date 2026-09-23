@@ -20,6 +20,13 @@ type IncomingRequest = {
     created_at: string;
 };
 
+type SentRequest = {
+    id: number;
+    to_user_id: string;
+    display_name: string;
+    created_at: string;
+};
+
 type FeedItem = {
     item_id: number;
     user_id: string;
@@ -50,6 +57,7 @@ function FriendsPage() {
 
     const [friends, setFriends] = useState<Friend[]>([]);
     const [requests, setRequests] = useState<IncomingRequest[]>([]);
+    const [sentRequests, setSentRequests] = useState<SentRequest[]>([]);
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -60,14 +68,16 @@ function FriendsPage() {
 
     async function loadData() {
         try {
-            const [friendsRes, requestsRes, feedRes] = await Promise.all([
+            const [friendsRes, requestsRes, sentRes, feedRes] = await Promise.all([
                 authFetch(`${API}/friends`),
                 authFetch(`${API}/friends/requests`),
+                authFetch(`${API}/friends/requests/sent`),
                 authFetch(`${API}/friends/feed?limit=5`),
             ]);
 
             if (friendsRes.ok) setFriends(await friendsRes.json());
             if (requestsRes.ok) setRequests(await requestsRes.json());
+            if (sentRes.ok) setSentRequests(await sentRes.json());
             if (feedRes.ok) setFeed(await feedRes.json());
         } catch (error) {
             console.error(error);
@@ -137,6 +147,15 @@ function FriendsPage() {
                 `${API}/friends/requests/${requestId}/${accept ? "accept" : "decline"}`,
                 { method: "POST" }
             );
+            await loadData();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function handleCancelRequest(requestId: number) {
+        try {
+            await authFetch(`${API}/friends/requests/${requestId}`, { method: "DELETE" });
             await loadData();
         } catch (error) {
             console.error(error);
@@ -267,6 +286,37 @@ function FriendsPage() {
                                             onClick={() => handleRespond(request.id, false)}
                                         >
                                             Decline
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {sentRequests.length > 0 && (
+                    <>
+                        <section className="section-heading">
+                            <div>
+                                <p className="eyebrow">AWAITING REPLY</p>
+                                <h3>Sent requests</h3>
+                            </div>
+                        </section>
+
+                        <div className="round-list">
+                            {sentRequests.map((request) => (
+                                <div className="round-row" key={request.id}>
+                                    <div>
+                                        <strong>{request.display_name}</strong>
+                                        <span>Sent {formatDate(request.created_at)}</span>
+                                    </div>
+
+                                    <div className="friend-request-actions">
+                                        <button
+                                            className="round-row-button"
+                                            onClick={() => handleCancelRequest(request.id)}
+                                        >
+                                            Cancel
                                         </button>
                                     </div>
                                 </div>
