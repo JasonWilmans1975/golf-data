@@ -1156,19 +1156,23 @@ button {
     position: relative;
 }
 
-.emoji-toggle {
-    border: 1px solid var(--border-strong);
-    background: transparent;
-    border-radius: 4px;
-    font-size: 16px;
-    padding: 9px 12px;
-    cursor: pointer;
-}
-
-.photo-upload-button {
+.composer-icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.composer-icon-button:hover {
+    background: var(--panel-2);
+    color: var(--accent);
 }
 
 .post-photo-preview {
@@ -1263,17 +1267,18 @@ button {
 .feed-actions-row {
     display: flex;
     align-items: stretch;
+    justify-content: flex-start;
     gap: 4px;
     margin-bottom: 4px;
 }
 
 .feed-action-button {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 8px 6px;
+    padding: 8px 14px;
     background: none;
     border: none;
     border-radius: 6px;
@@ -1293,7 +1298,7 @@ button {
 
 .reaction-bar {
     position: relative;
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     align-items: stretch;
 }
@@ -1354,7 +1359,7 @@ button {
 
 .feed-share-wrap {
     position: relative;
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
 }
 

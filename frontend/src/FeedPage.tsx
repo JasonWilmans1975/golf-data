@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
@@ -102,6 +102,71 @@ function initials(name: string) {
     return name.trim().charAt(0).toUpperCase() || "?";
 }
 
+function Icon({ children }: { children: ReactNode }) {
+    return (
+        <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            {children}
+        </svg>
+    );
+}
+
+function ImageIcon() {
+    return (
+        <Icon>
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+        </Icon>
+    );
+}
+
+function SmileIcon() {
+    return (
+        <Icon>
+            <circle cx="12" cy="12" r="10" />
+            <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+            <line x1="9" y1="9" x2="9.01" y2="9" />
+            <line x1="15" y1="9" x2="15.01" y2="9" />
+        </Icon>
+    );
+}
+
+function ThumbsUpIcon() {
+    return (
+        <Icon>
+            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z" />
+            <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+        </Icon>
+    );
+}
+
+function MessageIcon() {
+    return (
+        <Icon>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </Icon>
+    );
+}
+
+function ShareIcon() {
+    return (
+        <Icon>
+            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+            <path d="M16 6l-4-4-4 4" />
+            <path d="M12 2v14" />
+        </Icon>
+    );
+}
+
 function renderBody(body: string) {
     return body.split(/(@[a-zA-Z0-9._-]+)/g).map((part, index) =>
         part.startsWith("@") ? (
@@ -200,7 +265,7 @@ function ReactionBar({
                 className={`feed-action-button${reactions.my_reaction ? " active" : ""}`}
                 onClick={() => onReact(itemType, itemId, "like")}
             >
-                {activeEmoji || "👍"} {reactions.my_reaction ? "Liked" : "Like"}
+                {activeEmoji || <ThumbsUpIcon />} {reactions.my_reaction ? "Liked" : "Like"}
             </button>
 
             <button
@@ -286,8 +351,13 @@ function CommentComposer({
             </div>
 
             <div className="feed-comment-emoji-wrap">
-                <button type="button" className="emoji-toggle" onClick={() => onToggleEmojiPicker(key)}>
-                    🙂
+                <button
+                    type="button"
+                    className="composer-icon-button"
+                    aria-label="Add an emoji"
+                    onClick={() => onToggleEmojiPicker(key)}
+                >
+                    <SmileIcon />
                 </button>
 
                 {emojiPickerOpen === key && (
@@ -792,8 +862,8 @@ function FeedPage() {
                             )}
                         </div>
 
-                        <label className="emoji-toggle photo-upload-button">
-                            {postPhotoUploading ? "..." : "📷"}
+                        <label className="composer-icon-button" aria-label="Add a photo">
+                            {postPhotoUploading ? "..." : <ImageIcon />}
                             <input
                                 type="file"
                                 accept="image/*"
@@ -807,10 +877,11 @@ function FeedPage() {
                         <div className="feed-comment-emoji-wrap">
                             <button
                                 type="button"
-                                className="emoji-toggle"
+                                className="composer-icon-button"
+                                aria-label="Add an emoji"
                                 onClick={() => toggleEmojiPicker(NEW_POST_KEY)}
                             >
-                                🙂
+                                <SmileIcon />
                             </button>
 
                             {emojiPickerOpen === NEW_POST_KEY && (
@@ -1010,7 +1081,7 @@ function FeedPage() {
                                         className="feed-action-button"
                                         onClick={() => focusCommentInput(key)}
                                     >
-                                        💬 Comment
+                                        <MessageIcon /> Comment
                                     </button>
 
                                     <div className="feed-share-wrap">
@@ -1022,20 +1093,7 @@ function FeedPage() {
                                                 setShareMenuOpen((prev) => (prev === key ? null : key))
                                             }
                                         >
-                                            <svg
-                                                width="16"
-                                                height="16"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                            >
-                                                <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-                                                <path d="M16 6l-4-4-4 4" />
-                                                <path d="M12 2v14" />
-                                            </svg>
+                                            <ShareIcon />
                                             Share
                                         </button>
 
