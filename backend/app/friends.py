@@ -761,6 +761,64 @@ def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
     ]
 
 
+def list_comments_batch(user_id: str, items: list[tuple[str, int]]) -> dict[str, list[dict]]:
+    """Same data as list_comments, but for every Feed card on a page in one
+    round trip instead of one request per card -- loading 20 cards used to
+    fire 20 parallel comment requests."""
+    keys = [f"{item_type}:{item_id}" for item_type, item_id in items]
+    grouped: dict[str, list[dict]] = {key: [] for key in keys}
+
+    allowed = []
+    for item_type, item_id in items:
+        owner_id = _item_owner(item_type, item_id)
+        if owner_id is not None and _can_view_item(user_id, owner_id):
+            allowed.append((item_type, item_id))
+
+    if not allowed:
+        return grouped
+
+    allowed_types = list({item_type for item_type, _ in allowed})
+    allowed_ids = list({item_id for _, item_id in allowed})
+    valid_pairs = set(allowed)
+
+    response = (
+        supabase
+        .table("feed_comments")
+        .select("id,item_type,item_id,user_id,body,created_at")
+        .in_("item_type", allowed_types)
+        .in_("item_id", allowed_ids)
+        .order("created_at")
+        .execute()
+    )
+    rows = [row for row in response.data or [] if (row["item_type"], row["item_id"]) in valid_pairs]
+
+    if not rows:
+        return grouped
+
+    profiles_response = (
+        supabase
+        .table("profiles")
+        .select("user_id,display_name,email")
+        .in_("user_id", list({row["user_id"] for row in rows}))
+        .execute()
+    )
+    profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+    reactions_by_comment = _reaction_summary(user_id, [("comment", row["id"]) for row in rows])
+
+    for row in rows:
+        key = f"{row['item_type']}:{row['item_id']}"
+        grouped.setdefault(key, []).append({
+            "id": row["id"],
+            "user_id": row["user_id"],
+            "author_name": _display_name(profile_by_user.get(row["user_id"])),
+            "body": row["body"],
+            "created_at": row["created_at"],
+            "reactions": reactions_by_comment.get(("comment", row["id"]), _empty_reactions()),
+        })
+
+    return grouped
+
+
 def add_comment(user_id: str, item_type: str, item_id: int, body: str) -> dict:
     body = body.strip()
 
@@ -842,16 +900,22 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
 
     raw: list[dict] = []
 
-    for item_type, ids in my_items.items():
-        if not ids:
-            continue
+    # One combined query instead of one per item type (round/post/comment) --
+    # over-fetch by id across all types, then keep only the (type, id) pairs
+    # that are actually mine, same pattern as _comment_counts/_reaction_summary.
+    own_pairs = {
+        (item_type, item_id) for item_type, ids in my_items.items() for item_id in ids
+    }
+    all_my_ids = list({item_id for ids in my_items.values() for item_id in ids})
+    my_types = [item_type for item_type, ids in my_items.items() if ids]
 
+    if all_my_ids and my_types:
         response = (
             supabase
             .table("feed_likes")
-            .select("id,item_id,user_id,reaction,created_at")
-            .eq("item_type", item_type)
-            .in_("item_id", ids)
+            .select("id,item_type,item_id,user_id,reaction,created_at")
+            .in_("item_type", my_types)
+            .in_("item_id", all_my_ids)
             .neq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
@@ -859,11 +923,14 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
         )
 
         for row in response.data or []:
+            if (row["item_type"], row["item_id"]) not in own_pairs:
+                continue
+
             raw.append({
                 "id": f"like:{row['id']}",
                 "type": "like",
                 "actor_id": row["user_id"],
-                "item_type": item_type,
+                "item_type": row["item_type"],
                 "item_id": row["item_id"],
                 "reaction": row["reaction"],
                 "created_at": row["created_at"],

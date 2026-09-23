@@ -43,6 +43,7 @@ from .friends import (
     get_activity_feed,
     create_post,
     list_comments,
+    list_comments_batch,
     add_comment,
     delete_comment,
     toggle_reaction,
@@ -587,6 +588,20 @@ def feed_comments_list(
         return list_comments(user_id, item_type, item_id)
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc))
+
+
+class CommentBatchItem(BaseModel):
+    item_type: str
+    item_id: int
+
+
+class CommentBatchBody(BaseModel):
+    items: list[CommentBatchItem]
+
+
+@app.post("/feed/comments/batch")
+def feed_comments_batch(body: CommentBatchBody, user_id: str = Depends(get_current_user_id)):
+    return list_comments_batch(user_id, [(item.item_type, item.item_id) for item in body.items])
 
 
 class CommentBody(BaseModel):

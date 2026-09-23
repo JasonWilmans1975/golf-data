@@ -361,6 +361,45 @@ function FeedPage() {
         }
     }
 
+    async function loadCommentsBatch(items: FeedItem[]) {
+        if (items.length === 0) return;
+
+        const keys = items.map((item) => itemKey(item.item_type, item.item_id));
+        setCommentsLoading((prev) => {
+            const next = new Set(prev);
+            keys.forEach((key) => next.add(key));
+            return next;
+        });
+
+        try {
+            // One request for every card on the page instead of one request
+            // per card -- 20 cards used to fire 20 parallel comment fetches.
+            const response = await authFetch(`${API}/feed/comments/batch`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    items: items.map((item) => ({
+                        item_type: item.item_type,
+                        item_id: item.item_id,
+                    })),
+                }),
+            });
+
+            if (response.ok) {
+                const body: Record<string, Comment[]> = await response.json();
+                setComments((prev) => ({ ...prev, ...body }));
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setCommentsLoading((prev) => {
+                const next = new Set(prev);
+                keys.forEach((key) => next.delete(key));
+                return next;
+            });
+        }
+    }
+
     const PAGE_SIZE = 20;
 
     async function loadFeed(reset: boolean) {
@@ -373,9 +412,7 @@ function FeedPage() {
             if (response.ok) {
                 const items: FeedItem[] = await response.json();
                 setFeed((prev) => (reset ? items : [...prev, ...items]));
-                items.forEach((item) =>
-                    loadComments(itemKey(item.item_type, item.item_id), item.item_type, item.item_id)
-                );
+                loadCommentsBatch(items);
                 setHasMore(items.length === PAGE_SIZE);
             }
         } catch (error) {

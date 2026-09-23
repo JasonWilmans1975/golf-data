@@ -61,6 +61,7 @@ function NotificationsBell() {
         // clicked -- opening it should be instant, not trigger a fresh
         // network round trip.
         let cancelled = false;
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
         function refetch() {
             authFetch(`${API}/notifications`)
@@ -74,6 +75,13 @@ function NotificationsBell() {
                 });
         }
 
+        function refetchDebounced() {
+            // A burst of likes/comments arriving together should collapse
+            // into one re-fetch, not one per event.
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(refetch, 500);
+        }
+
         refetch();
 
         // Realtime here is just a "something changed, go re-fetch" signal --
@@ -82,13 +90,18 @@ function NotificationsBell() {
         // read directly off the realtime payload.
         const channel = supabase
             .channel("notifications-changes")
-            .on("postgres_changes", { event: "*", schema: "public", table: "feed_likes" }, refetch)
-            .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, refetch)
-            .on("postgres_changes", { event: "INSERT", schema: "public", table: "feed_comments" }, refetch)
+            .on("postgres_changes", { event: "*", schema: "public", table: "feed_likes" }, refetchDebounced)
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, refetchDebounced)
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "feed_comments" },
+                refetchDebounced
+            )
             .subscribe();
 
         return () => {
             cancelled = true;
+            if (debounceTimer) clearTimeout(debounceTimer);
             supabase.removeChannel(channel);
         };
     }, []);
@@ -127,7 +140,21 @@ function NotificationsBell() {
         <div className="notifications-wrap" ref={wrapRef}>
             <button className="bottom-nav-button" aria-label="Notifications" onClick={toggleOpen}>
                 <span className="bottom-nav-icon-wrap">
-                    <span className="bottom-nav-icon">🔔</span>
+                    <span className="bottom-nav-icon">
+                        <svg
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        >
+                            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                    </span>
                     {unreadCount > 0 && (
                         <span className="nav-badge-count">{unreadCount > 9 ? "9+" : unreadCount}</span>
                     )}
