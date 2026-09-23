@@ -48,21 +48,28 @@ function notificationText(n: Notification) {
 
 function NotificationsBell() {
     const navigate = useNavigate();
-    const [hasUnread, setHasUnread] = useState(false);
     const [open, setOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loaded, setLoaded] = useState(false);
     const wrapRef = useRef<HTMLDivElement>(null);
 
+    const unreadCount = notifications.filter((n) => !n.read).length;
+
     useEffect(() => {
+        // Fetch the full list up front instead of waiting until the bell is
+        // clicked -- opening it should be instant, not trigger a fresh
+        // network round trip.
         let cancelled = false;
 
-        authFetch(`${API}/notifications/summary`)
+        authFetch(`${API}/notifications`)
             .then((response) => (response.ok ? response.json() : null))
             .then((body) => {
-                if (!cancelled && body) setHasUnread(Boolean(body.has_unread));
+                if (!cancelled && body) setNotifications(body);
             })
-            .catch(() => {});
+            .catch(() => {})
+            .finally(() => {
+                if (!cancelled) setLoaded(true);
+            });
 
         return () => {
             cancelled = true;
@@ -82,25 +89,16 @@ function NotificationsBell() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [open]);
 
-    async function toggleOpen() {
+    function toggleOpen() {
         const next = !open;
         setOpen(next);
 
-        if (!next) return;
-
-        setLoading(true);
-
-        try {
-            const response = await authFetch(`${API}/notifications`);
-            if (response.ok) setNotifications(await response.json());
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
+        // Rows already loaded keep showing as unread for this viewing (like
+        // Facebook), but opening the panel clears the badge count for next
+        // time.
+        if (next && unreadCount > 0) {
+            authFetch(`${API}/notifications/ack`, { method: "POST" }).catch(() => {});
         }
-
-        setHasUnread(false);
-        authFetch(`${API}/notifications/ack`, { method: "POST" }).catch(() => {});
     }
 
     function handleSelect(n: Notification) {
@@ -116,14 +114,16 @@ function NotificationsBell() {
                 onClick={toggleOpen}
             >
                 🔔
-                {hasUnread && <span className="nav-badge" />}
+                {unreadCount > 0 && (
+                    <span className="nav-badge-count">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                )}
             </button>
 
             {open && (
                 <div className="notifications-panel">
                     <div className="notifications-panel-header">Notifications</div>
 
-                    {loading ? (
+                    {!loaded ? (
                         <div className="notifications-empty">Loading...</div>
                     ) : notifications.length === 0 ? (
                         <div className="notifications-empty">Nothing yet.</div>

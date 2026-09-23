@@ -744,6 +744,22 @@ button {
     right: 4px;
 }
 
+.nav-badge-count {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    background: var(--error);
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 18px;
+    text-align: center;
+}
+
 .notifications-panel {
     position: absolute;
     top: 100%;

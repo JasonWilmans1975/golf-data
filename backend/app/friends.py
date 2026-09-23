@@ -823,62 +823,13 @@ def _get_profile_row(user_id: str) -> dict:
     return response.data[0] if response.data else {}
 
 
-def get_notification_summary(user_id: str) -> dict:
-    """Lightweight, read-only check used for the Feed nav badge: has
-    anything happened (a like on something of mine, or a mention of me)
-    since I last opened the Feed page. Not a full notifications inbox --
-    just enough to tell the user "there's something new"."""
-    profile = _get_profile_row(user_id)
-    since = profile.get("notifications_checked_at") or "1970-01-01T00:00:00Z"
-    my_items = _my_item_ids(user_id)
-
-    for item_type, ids in (("round", my_items["round"]), ("post", my_items["post"]), ("comment", my_items["comment"])):
-        if not ids:
-            continue
-
-        response = (
-            supabase
-            .table("feed_likes")
-            .select("id")
-            .eq("item_type", item_type)
-            .in_("item_id", ids)
-            .neq("user_id", user_id)
-            .gt("created_at", since)
-            .limit(1)
-            .execute()
-        )
-
-        if response.data:
-            return {"has_unread": True}
-
-    display_name = _display_name(profile)
-
-    for table in ("posts", "feed_comments"):
-        response = (
-            supabase
-            .table(table)
-            .select("id")
-            .ilike("body", f"%@{display_name}%")
-            .neq("user_id", user_id)
-            .gt("created_at", since)
-            .limit(1)
-            .execute()
-        )
-
-        if response.data:
-            return {"has_unread": True}
-
-    return {"has_unread": False}
-
-
 def acknowledge_notifications(user_id: str) -> None:
     supabase.table("profiles").update({"notifications_checked_at": _now()}).eq("user_id", user_id).execute()
 
 
 def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
-    """A real, clickable notifications list (unlike get_notification_summary,
-    which is just a yes/no badge check) -- a like on something of mine, or a
-    mention of me, each resolved to the round/post it belongs to so the
+    """A real, clickable notifications list -- a like on something of mine,
+    or a mention of me, each resolved to the round/post it belongs to so the
     frontend can jump straight to it."""
     profile = _get_profile_row(user_id)
     checked_at = profile.get("notifications_checked_at") or "1970-01-01T00:00:00Z"
