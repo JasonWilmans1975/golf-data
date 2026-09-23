@@ -273,15 +273,49 @@ exception
   when duplicate_object then null;
 end $$;
 
--- Comments on a round, shown on the new Feed page. Visibility (who can
--- read/write a round's comments) is enforced in the backend, same as
--- everything else -- this table is only ever touched via the service role.
-create table if not exists public.round_comments (
+-- round_comments was replaced by the generalized feed_comments table below
+-- before any real comments were posted, so this is a safe drop (no data).
+drop table if exists public.round_comments;
+
+-- Free-form posts (not tied to a round), and reshares of an existing round
+-- or post. shared_item_type/id are set only when this post is a reshare.
+create table if not exists public.posts (
   id bigint generated always as identity primary key,
-  score_id bigint not null references public.handicap_scores(score_id),
+  user_id uuid not null,
+  body text not null default '',
+  shared_item_type text check (shared_item_type in ('round', 'post')),
+  shared_item_id bigint,
+  created_at timestamptz default now()
+);
+
+create index if not exists posts_user_id_idx on public.posts(user_id);
+
+-- Comments, generalized across both content types shown on the Feed page
+-- (a round or a free-form post). Visibility is enforced in the backend
+-- (same trust boundary as everything else -- this table is only ever
+-- touched via the service role), not via RLS.
+create table if not exists public.feed_comments (
+  id bigint generated always as identity primary key,
+  item_type text not null check (item_type in ('round', 'post')),
+  item_id bigint not null,
   user_id uuid not null,
   body text not null,
   created_at timestamptz default now()
 );
 
-create index if not exists round_comments_score_id_idx on public.round_comments(score_id);
+create index if not exists feed_comments_item_idx on public.feed_comments(item_type, item_id);
+
+-- Facebook-style reactions on a round, a post, or a comment. One reaction
+-- per user per item; changing your reaction updates the row instead of
+-- adding a second one.
+create table if not exists public.feed_likes (
+  id bigint generated always as identity primary key,
+  item_type text not null check (item_type in ('round', 'post', 'comment')),
+  item_id bigint not null,
+  user_id uuid not null,
+  reaction text not null default 'like' check (reaction in ('like', 'love', 'haha', 'wow', 'sad', 'angry')),
+  created_at timestamptz default now(),
+  unique (item_type, item_id, user_id)
+);
+
+create index if not exists feed_likes_item_idx on public.feed_likes(item_type, item_id);

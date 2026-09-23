@@ -270,7 +270,196 @@ def remove_friend(user_id: str, friend_user_id: str) -> None:
     )
 
 
-def _build_feed(user_ids: list[str], limit: int) -> list[dict]:
+def _comment_counts(items: list[tuple[str, int]]) -> dict[tuple[str, int], int]:
+    if not items:
+        return {}
+
+    response = (
+        supabase
+        .table("feed_comments")
+        .select("item_type,item_id")
+        .in_("item_type", list({item_type for item_type, _ in items}))
+        .in_("item_id", list({item_id for _, item_id in items}))
+        .execute()
+    )
+
+    valid = set(items)
+    counts: dict[tuple[str, int], int] = {}
+
+    for row in response.data or []:
+        key = (row["item_type"], row["item_id"])
+        if key in valid:
+            counts[key] = counts.get(key, 0) + 1
+
+    return counts
+
+
+REACTIONS = {"like", "love", "haha", "wow", "sad", "angry"}
+
+
+def _empty_reactions() -> dict:
+    return {"counts": {}, "total": 0, "my_reaction": None}
+
+
+def _reaction_summary(viewer_id: str, items: list[tuple[str, int]]) -> dict[tuple[str, int], dict]:
+    if not items:
+        return {}
+
+    response = (
+        supabase
+        .table("feed_likes")
+        .select("item_type,item_id,user_id,reaction")
+        .in_("item_type", list({item_type for item_type, _ in items}))
+        .in_("item_id", list({item_id for _, item_id in items}))
+        .execute()
+    )
+
+    valid = set(items)
+    summary: dict[tuple[str, int], dict] = {}
+
+    for row in response.data or []:
+        key = (row["item_type"], row["item_id"])
+
+        if key not in valid:
+            continue
+
+        entry = summary.setdefault(key, _empty_reactions())
+        entry["counts"][row["reaction"]] = entry["counts"].get(row["reaction"], 0) + 1
+        entry["total"] += 1
+
+        if row["user_id"] == viewer_id:
+            entry["my_reaction"] = row["reaction"]
+
+    return summary
+
+
+def toggle_reaction(user_id: str, item_type: str, item_id: int, reaction: str) -> dict:
+    if reaction not in REACTIONS:
+        raise ValueError("Invalid reaction")
+
+    if item_type == "comment":
+        comment_response = (
+            supabase.table("feed_comments").select("item_type,item_id").eq("id", item_id).limit(1).execute()
+        )
+
+        if not comment_response.data:
+            raise ValueError("Not found")
+
+        parent = comment_response.data[0]
+        owner_id = _item_owner(parent["item_type"], parent["item_id"])
+    elif item_type in ("round", "post"):
+        owner_id = _item_owner(item_type, item_id)
+    else:
+        raise ValueError("Invalid item type")
+
+    if owner_id is None or not _can_view_item(user_id, owner_id):
+        raise ValueError("Not found")
+
+    existing = (
+        supabase
+        .table("feed_likes")
+        .select("id,reaction")
+        .eq("item_type", item_type)
+        .eq("item_id", item_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        current = existing.data[0]
+
+        if current["reaction"] == reaction:
+            supabase.table("feed_likes").delete().eq("id", current["id"]).execute()
+            return {"reaction": None}
+
+        supabase.table("feed_likes").update({"reaction": reaction}).eq("id", current["id"]).execute()
+        return {"reaction": reaction}
+
+    supabase.table("feed_likes").insert({
+        "item_type": item_type,
+        "item_id": item_id,
+        "user_id": user_id,
+        "reaction": reaction,
+    }).execute()
+
+    return {"reaction": reaction}
+
+
+def _snapshot_item(item_type: str, item_id: int) -> dict | None:
+    if item_type == "round":
+        response = (
+            supabase
+            .table("handicap_scores")
+            .select("score_id,user_id,play_date,adjusted_gross,stableford_points,course_id,course_name")
+            .eq("score_id", item_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not response.data:
+            return None
+
+        score = response.data[0]
+        course = {}
+
+        if score.get("course_id"):
+            course_response = (
+                supabase
+                .table("courses")
+                .select("name,photo_url,google_photo_url")
+                .eq("id", score["course_id"])
+                .limit(1)
+                .execute()
+            )
+            if course_response.data:
+                course = course_response.data[0]
+
+        profile_response = (
+            supabase.table("profiles").select("display_name,email").eq("user_id", score["user_id"]).limit(1).execute()
+        )
+        profile = profile_response.data[0] if profile_response.data else None
+
+        return {
+            "item_type": "round",
+            "item_id": score["score_id"],
+            "player_name": _display_name(profile),
+            "posted_at": score["play_date"],
+            "body": None,
+            "course_name": course.get("name") or score.get("course_name"),
+            "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
+            "adjusted_gross": score.get("adjusted_gross"),
+            "stableford_points": score.get("stableford_points"),
+        }
+
+    if item_type == "post":
+        response = supabase.table("posts").select("id,user_id,body,created_at").eq("id", item_id).limit(1).execute()
+
+        if not response.data:
+            return None
+
+        post = response.data[0]
+        profile_response = (
+            supabase.table("profiles").select("display_name,email").eq("user_id", post["user_id"]).limit(1).execute()
+        )
+        profile = profile_response.data[0] if profile_response.data else None
+
+        return {
+            "item_type": "post",
+            "item_id": post["id"],
+            "player_name": _display_name(profile),
+            "posted_at": post["created_at"],
+            "body": post["body"],
+            "course_name": None,
+            "course_photo_url": None,
+            "adjusted_gross": None,
+            "stableford_points": None,
+        }
+
+    return None
+
+
+def _build_rounds_feed(viewer_id: str, user_ids: list[str], limit: int) -> list[dict]:
     scores_response = (
         supabase
         .table("handicap_scores")
@@ -310,31 +499,28 @@ def _build_feed(user_ids: list[str], limit: int) -> list[dict]:
         )
         course_by_id = {row["id"]: row for row in courses_response.data or []}
 
-    score_ids = [score["score_id"] for score in scores]
-    comment_counts: dict[int, int] = {}
-
-    if score_ids:
-        comments_response = (
-            supabase.table("round_comments").select("score_id").in_("score_id", score_ids).execute()
-        )
-        for row in comments_response.data or []:
-            comment_counts[row["score_id"]] = comment_counts.get(row["score_id"], 0) + 1
+    comment_counts = _comment_counts([("round", score["score_id"]) for score in scores])
+    reactions_by_item = _reaction_summary(viewer_id, [("round", score["score_id"]) for score in scores])
 
     feed = []
     for score in scores:
         course = course_by_id.get(score.get("course_id"), {})
         feed.append({
-            "score_id": score["score_id"],
+            "item_type": "round",
+            "item_id": score["score_id"],
             "user_id": score["user_id"],
             "player_name": _display_name(profile_by_user.get(score["user_id"])),
-            "play_date": score["play_date"],
+            "posted_at": score["play_date"],
+            "body": None,
+            "shared_item": None,
             "adjusted_gross": score.get("adjusted_gross"),
             "stableford_points": score.get("stableford_points"),
             "course_name": course.get("name") or score.get("course_name"),
             "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
             "country_name": score.get("country_name") or course.get("country_name"),
             "country_flag_url": score.get("country_flag_url"),
-            "comment_count": comment_counts.get(score["score_id"], 0),
+            "comment_count": comment_counts.get(("round", score["score_id"]), 0),
+            "reactions": reactions_by_item.get(("round", score["score_id"]), _empty_reactions()),
         })
 
     return feed
@@ -346,19 +532,108 @@ def get_friends_feed(user_id: str, limit: int = 30) -> list[dict]:
     if not friend_ids:
         return []
 
-    return _build_feed(friend_ids, limit)
+    return _build_rounds_feed(user_id, friend_ids, limit)
+
+
+def create_post(
+    user_id: str,
+    body: str,
+    shared_item_type: str | None = None,
+    shared_item_id: int | None = None,
+) -> dict:
+    body = body.strip()
+
+    if not body and not (shared_item_type and shared_item_id):
+        raise ValueError("Post can't be empty")
+
+    if len(body) > 2000:
+        raise ValueError("Post is too long")
+
+    row = {"user_id": user_id, "body": body}
+
+    if shared_item_type and shared_item_id:
+        if shared_item_type not in ("round", "post"):
+            raise ValueError("That can't be shared")
+
+        owner_id = _item_owner(shared_item_type, shared_item_id)
+
+        if owner_id is None or not _can_view_item(user_id, owner_id):
+            raise ValueError("Not found")
+
+        row["shared_item_type"] = shared_item_type
+        row["shared_item_id"] = shared_item_id
+
+    response = supabase.table("posts").insert(row).execute()
+
+    return response.data[0]
 
 
 def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
     circle_ids = list(set(list_friend_ids(user_id) + [user_id]))
 
-    return _build_feed(circle_ids, limit)
+    rounds = _build_rounds_feed(user_id, circle_ids, limit)
 
-
-def _round_owner(score_id: int) -> str | None:
-    response = (
-        supabase.table("handicap_scores").select("user_id").eq("score_id", score_id).limit(1).execute()
+    posts_response = (
+        supabase
+        .table("posts")
+        .select("id,user_id,body,shared_item_type,shared_item_id,created_at")
+        .in_("user_id", circle_ids)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
     )
+    posts = posts_response.data or []
+
+    if posts:
+        profiles_response = (
+            supabase
+            .table("profiles")
+            .select("user_id,display_name,email")
+            .in_("user_id", list({post["user_id"] for post in posts}))
+            .execute()
+        )
+        profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+        comment_counts = _comment_counts([("post", post["id"]) for post in posts])
+        reactions_by_item = _reaction_summary(user_id, [("post", post["id"]) for post in posts])
+
+        for post in posts:
+            shared_item = None
+            if post.get("shared_item_type") and post.get("shared_item_id"):
+                shared_item = _snapshot_item(post["shared_item_type"], post["shared_item_id"])
+
+            rounds.append({
+                "item_type": "post",
+                "item_id": post["id"],
+                "user_id": post["user_id"],
+                "player_name": _display_name(profile_by_user.get(post["user_id"])),
+                "posted_at": post["created_at"],
+                "body": post["body"],
+                "shared_item": shared_item,
+                "adjusted_gross": None,
+                "stableford_points": None,
+                "course_name": None,
+                "course_photo_url": None,
+                "country_name": None,
+                "country_flag_url": None,
+                "comment_count": comment_counts.get(("post", post["id"]), 0),
+                "reactions": reactions_by_item.get(("post", post["id"]), _empty_reactions()),
+            })
+
+    rounds.sort(key=lambda item: str(item["posted_at"]), reverse=True)
+
+    return rounds[:limit]
+
+
+def _item_owner(item_type: str, item_id: int) -> str | None:
+    if item_type not in ("round", "post"):
+        return None
+
+    if item_type == "post":
+        response = supabase.table("posts").select("user_id").eq("id", item_id).limit(1).execute()
+    else:
+        response = (
+            supabase.table("handicap_scores").select("user_id").eq("score_id", item_id).limit(1).execute()
+        )
 
     if not response.data:
         return None
@@ -366,24 +641,25 @@ def _round_owner(score_id: int) -> str | None:
     return response.data[0]["user_id"]
 
 
-def _can_view_round(viewer_id: str, owner_id: str) -> bool:
+def _can_view_item(viewer_id: str, owner_id: str) -> bool:
     if viewer_id == owner_id:
         return True
 
     return owner_id in list_friend_ids(viewer_id)
 
 
-def list_comments(user_id: str, score_id: int) -> list[dict]:
-    owner_id = _round_owner(score_id)
+def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
+    owner_id = _item_owner(item_type, item_id)
 
-    if owner_id is None or not _can_view_round(user_id, owner_id):
-        raise ValueError("Round not found")
+    if owner_id is None or not _can_view_item(user_id, owner_id):
+        raise ValueError("Not found")
 
     response = (
         supabase
-        .table("round_comments")
+        .table("feed_comments")
         .select("id,user_id,body,created_at")
-        .eq("score_id", score_id)
+        .eq("item_type", item_type)
+        .eq("item_id", item_id)
         .order("created_at")
         .execute()
     )
@@ -400,6 +676,7 @@ def list_comments(user_id: str, score_id: int) -> list[dict]:
         .execute()
     )
     profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+    reactions_by_comment = _reaction_summary(user_id, [("comment", comment["id"]) for comment in comments])
 
     return [
         {
@@ -408,12 +685,13 @@ def list_comments(user_id: str, score_id: int) -> list[dict]:
             "author_name": _display_name(profile_by_user.get(comment["user_id"])),
             "body": comment["body"],
             "created_at": comment["created_at"],
+            "reactions": reactions_by_comment.get(("comment", comment["id"]), _empty_reactions()),
         }
         for comment in comments
     ]
 
 
-def add_comment(user_id: str, score_id: int, body: str) -> dict:
+def add_comment(user_id: str, item_type: str, item_id: int, body: str) -> dict:
     body = body.strip()
 
     if not body:
@@ -422,15 +700,15 @@ def add_comment(user_id: str, score_id: int, body: str) -> dict:
     if len(body) > 1000:
         raise ValueError("Comment is too long")
 
-    owner_id = _round_owner(score_id)
+    owner_id = _item_owner(item_type, item_id)
 
-    if owner_id is None or not _can_view_round(user_id, owner_id):
-        raise ValueError("Round not found")
+    if owner_id is None or not _can_view_item(user_id, owner_id):
+        raise ValueError("Not found")
 
     response = (
         supabase
-        .table("round_comments")
-        .insert({"score_id": score_id, "user_id": user_id, "body": body})
+        .table("feed_comments")
+        .insert({"item_type": item_type, "item_id": item_id, "user_id": user_id, "body": body})
         .execute()
     )
 
@@ -438,7 +716,7 @@ def add_comment(user_id: str, score_id: int, body: str) -> dict:
 
 
 def delete_comment(user_id: str, comment_id: int) -> None:
-    response = supabase.table("round_comments").select("id,user_id").eq("id", comment_id).limit(1).execute()
+    response = supabase.table("feed_comments").select("id,user_id").eq("id", comment_id).limit(1).execute()
 
     if not response.data:
         raise ValueError("Comment not found")
@@ -446,4 +724,4 @@ def delete_comment(user_id: str, comment_id: int) -> None:
     if response.data[0]["user_id"] != user_id:
         raise ValueError("Comment not found")
 
-    supabase.table("round_comments").delete().eq("id", comment_id).execute()
+    supabase.table("feed_comments").delete().eq("id", comment_id).execute()

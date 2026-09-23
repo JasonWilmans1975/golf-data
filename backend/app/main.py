@@ -39,9 +39,11 @@ from .friends import (
     remove_friend,
     get_friends_feed,
     get_activity_feed,
+    create_post,
     list_comments,
     add_comment,
     delete_comment,
+    toggle_reaction,
 )
 
 COURSE_PHOTOS_BUCKET = "course-photos"
@@ -520,10 +522,26 @@ def activity_feed(limit: int = 20, user_id: str = Depends(get_current_user_id)):
     return get_activity_feed(user_id, limit=limit)
 
 
-@app.get("/rounds/{score_id}/comments")
-def round_comments_list(score_id: int, user_id: str = Depends(get_current_user_id)):
+class PostBody(BaseModel):
+    body: str = ""
+    shared_item_type: str | None = None
+    shared_item_id: int | None = None
+
+
+@app.post("/feed/posts")
+def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)):
     try:
-        return list_comments(user_id, score_id)
+        return create_post(user_id, body.body, body.shared_item_type, body.shared_item_id)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+
+
+@app.get("/feed/{item_type}/{item_id}/comments")
+def feed_comments_list(
+    item_type: str, item_id: int, user_id: str = Depends(get_current_user_id)
+):
+    try:
+        return list_comments(user_id, item_type, item_id)
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc))
 
@@ -532,21 +550,35 @@ class CommentBody(BaseModel):
     body: str
 
 
-@app.post("/rounds/{score_id}/comments")
-def round_comments_create(
-    score_id: int, body: CommentBody, user_id: str = Depends(get_current_user_id)
+@app.post("/feed/{item_type}/{item_id}/comments")
+def feed_comments_create(
+    item_type: str, item_id: int, body: CommentBody, user_id: str = Depends(get_current_user_id)
 ):
     try:
-        return add_comment(user_id, score_id, body.body)
+        return add_comment(user_id, item_type, item_id, body.body)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
 
 
-@app.delete("/rounds/comments/{comment_id}")
-def round_comment_delete(comment_id: int, user_id: str = Depends(get_current_user_id)):
+@app.delete("/feed/comments/{comment_id}")
+def feed_comment_delete(comment_id: int, user_id: str = Depends(get_current_user_id)):
     try:
         delete_comment(user_id, comment_id)
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc))
 
     return {"removed": True}
+
+
+class ReactionBody(BaseModel):
+    reaction: str = "like"
+
+
+@app.post("/feed/{item_type}/{item_id}/react")
+def feed_react(
+    item_type: str, item_id: int, body: ReactionBody, user_id: str = Depends(get_current_user_id)
+):
+    try:
+        return toggle_reaction(user_id, item_type, item_id, body.reaction)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
