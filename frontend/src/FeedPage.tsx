@@ -208,9 +208,11 @@ function reactionSummary(reactions: ReactionSummary) {
         <span className="reaction-summary-inline">
             {Object.entries(reactions.counts)
                 .sort((a, b) => b[1] - a[1])
-                .map(([reaction]) => REACTION_EMOJI[reaction])
-                .join("")}{" "}
-            {reactions.total}
+                .map(([reaction, count]) => (
+                    <span className="reaction-summary-badge" key={reaction}>
+                        {REACTION_EMOJI[reaction]} {count}
+                    </span>
+                ))}
         </span>
     );
 }
@@ -575,6 +577,22 @@ function FeedPage() {
         observer.observe(sentinel);
         return () => observer.disconnect();
     }, [hasMore, loading, loadingMore, feed.length]);
+
+    useEffect(() => {
+        // Clicking anywhere outside an open reaction picker / share menu /
+        // emoji picker / mention dropdown closes it.
+        function handleClickOutside(event: MouseEvent) {
+            const target = event.target as HTMLElement;
+
+            if (!target.closest(".reaction-bar")) setReactionPickerOpen(null);
+            if (!target.closest(".feed-share-wrap")) setShareMenuOpen(null);
+            if (!target.closest(".feed-comment-emoji-wrap")) setEmojiPickerOpen(null);
+            if (!target.closest(".feed-comment-input-wrap")) setMentionQuery({});
+        }
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     function handleDraftChange(key: string, value: string) {
         setDrafts((prev) => ({ ...prev, [key]: value }));
@@ -1044,17 +1062,11 @@ function FeedPage() {
                                     </a>
                                 )}
 
-                                <div className="feed-meta-row">
-                                    {reactionSummary(item.reactions) || <span />}
-
-                                    <span className="feed-comment-count">
-                                        {item.comment_count === 0
-                                            ? "No comments yet"
-                                            : `${item.comment_count} ${
-                                                  item.comment_count === 1 ? "comment" : "comments"
-                                              }`}
-                                    </span>
-                                </div>
+                                {reactionSummary(item.reactions) && (
+                                    <div className="feed-meta-row">
+                                        {reactionSummary(item.reactions)}
+                                    </div>
+                                )}
 
                                 <div className="feed-actions-row">
                                     <ReactionBar
@@ -1075,6 +1087,9 @@ function FeedPage() {
                                         onClick={() => focusCommentInput(key)}
                                     >
                                         <MessageIcon />
+                                        {item.comment_count > 0 && (
+                                            <span className="feed-action-count">{item.comment_count}</span>
+                                        )}
                                     </button>
 
                                     <div className="feed-share-wrap">
