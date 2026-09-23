@@ -553,7 +553,7 @@ function CourseDetail() {
     const navigate = useNavigate();
 
     const [selectedRoundId, setSelectedRoundId] = useState<number | null>(null);
-    const [mapLayer, setMapLayer] = useState<"map" | "satellite">("map");
+    const [mapLayer, setMapLayer] = useState<"map" | "satellite">("satellite");
 
     const [course, setCourse] =
         useState<Course | null>(null);

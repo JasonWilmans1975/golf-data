@@ -80,7 +80,7 @@ function MapPage() {
     const [courses, setCourses] = useState<Course[]>([]);
     const [countries, setCountries] = useState<CountryPlayed[]>([]);
     const [loading, setLoading] = useState(true);
-    const [mapLayer, setMapLayer] = useState<"map" | "satellite">("map");
+    const [mapLayer, setMapLayer] = useState<"map" | "satellite">("satellite");
     const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
 
     useEffect(() => {
