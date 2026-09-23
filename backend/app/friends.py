@@ -632,10 +632,14 @@ def create_post(
     return response.data[0]
 
 
-def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
+def get_activity_feed(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
     circle_ids = list(set(list_friend_ids(user_id) + [user_id]))
+    # There's no single "feed" table to page over -- rounds and posts are
+    # merged and re-sorted here -- so fetch enough of each source to cover
+    # every page up to this one, then slice the combined, sorted list.
+    fetch_count = offset + limit
 
-    rounds = _build_rounds_feed(user_id, circle_ids, limit)
+    rounds = _build_rounds_feed(user_id, circle_ids, fetch_count)
 
     posts_response = (
         supabase
@@ -643,7 +647,7 @@ def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
         .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at")
         .in_("user_id", circle_ids)
         .order("created_at", desc=True)
-        .limit(limit)
+        .limit(fetch_count)
         .execute()
     )
     posts = posts_response.data or []
@@ -687,7 +691,7 @@ def get_activity_feed(user_id: str, limit: int = 20) -> list[dict]:
 
     rounds.sort(key=lambda item: str(item["posted_at"]), reverse=True)
 
-    return rounds[:limit]
+    return rounds[offset:offset + limit]
 
 
 def _item_owner(item_type: str, item_id: int) -> str | None:

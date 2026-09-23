@@ -538,8 +538,8 @@ def friends_remove(friend_user_id: str, user_id: str = Depends(get_current_user_
 
 
 @app.get("/feed")
-def activity_feed(limit: int = 20, user_id: str = Depends(get_current_user_id)):
-    return get_activity_feed(user_id, limit=limit)
+def activity_feed(limit: int = 20, offset: int = 0, user_id: str = Depends(get_current_user_id)):
+    return get_activity_feed(user_id, limit=limit, offset=offset)
 
 
 class PostBody(BaseModel):

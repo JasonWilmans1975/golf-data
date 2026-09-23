@@ -868,7 +868,12 @@ button {
 }
 
 .feed-card-highlight {
-    box-shadow: 0 0 0 3px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 0 0 2px var(--border-strong), 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.feed-load-more-sentinel {
+    padding: 16px 0;
+    text-align: center;
 }
 
 .feed-card-header {

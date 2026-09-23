@@ -314,6 +314,9 @@ function FeedPage() {
     const [friends, setFriends] = useState<Friend[]>([]);
     const [myName, setMyName] = useState("");
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const sentinelRef = useRef<HTMLDivElement>(null);
 
     const [comments, setComments] = useState<Record<string, Comment[]>>({});
     const [commentsLoading, setCommentsLoading] = useState<Set<string>>(new Set());
@@ -357,18 +360,27 @@ function FeedPage() {
         }
     }
 
-    async function loadFeed() {
+    const PAGE_SIZE = 20;
+
+    async function loadFeed(reset: boolean) {
+        if (!reset) setLoadingMore(true);
+
         try {
-            const response = await authFetch(`${API}/feed?limit=20`);
+            const offset = reset ? 0 : feed.length;
+            const response = await authFetch(`${API}/feed?limit=${PAGE_SIZE}&offset=${offset}`);
+
             if (response.ok) {
                 const items: FeedItem[] = await response.json();
-                setFeed(items);
+                setFeed((prev) => (reset ? items : [...prev, ...items]));
                 items.forEach((item) =>
                     loadComments(itemKey(item.item_type, item.item_id), item.item_type, item.item_id)
                 );
+                setHasMore(items.length === PAGE_SIZE);
             }
         } catch (error) {
             console.error(error);
+        } finally {
+            if (!reset) setLoadingMore(false);
         }
     }
 
@@ -389,7 +401,7 @@ function FeedPage() {
             return;
         }
 
-        Promise.all([loadFeed(), loadFriends()]).finally(() => setLoading(false));
+        Promise.all([loadFeed(true), loadFriends()]).finally(() => setLoading(false));
         // Opening the Feed page counts as having seen what's new -- clears
         // the unread badge on the nav link.
         authFetch(`${API}/notifications/ack`, { method: "POST" }).catch(() => {});
@@ -445,6 +457,23 @@ function FeedPage() {
         const timeout = setTimeout(() => setHighlightKey(null), 2500);
         return () => clearTimeout(timeout);
     }, [highlightKey, feed]);
+
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        if (!sentinel) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+                    loadFeed(false);
+                }
+            },
+            { rootMargin: "400px" }
+        );
+
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, loading, loadingMore, feed.length]);
 
     function handleDraftChange(key: string, value: string) {
         setDrafts((prev) => ({ ...prev, [key]: value }));
@@ -626,7 +655,7 @@ function FeedPage() {
                 setPostPhotoUrl(null);
                 setShareTarget(null);
                 setEmojiPickerOpen(null);
-                await loadFeed();
+                await loadFeed(true);
             }
         } catch (error) {
             console.error(error);
@@ -1045,6 +1074,12 @@ function FeedPage() {
                             </article>
                         );
                     })
+                )}
+
+                {!loading && feed.length > 0 && (
+                    <div ref={sentinelRef} className="feed-load-more-sentinel">
+                        {loadingMore && <span className="course-count">Loading more...</span>}
+                    </div>
                 )}
                 </div>
             </main>
