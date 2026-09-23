@@ -77,14 +77,39 @@ function HandicapPage() {
     const [history, setHistory] = useState<HandicapSnapshot[]>([]);
     const [scores, setScores] = useState<Score[]>([]);
     const [currentHandicap, setCurrentHandicap] = useState<number | null>(null);
-    const [syncing, setSyncing] = useState(true);
+    const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState<string | null>(null);
     const [justSynced, setJustSynced] = useState(false);
     const [sortKey, setSortKey] = useState<"date" | "gross" | "stableford">("date");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
     useEffect(() => {
-        async function load() {
+        async function loadData() {
+            try {
+                const [historyRes, scoresRes, currentRes] = await Promise.all([
+                    authFetch(`${API}/handicap`),
+                    authFetch(`${API}/handicap/scores`),
+                    authFetch(`${API}/handicap/current`),
+                ]);
+
+                setHistory(await historyRes.json());
+                setScores(await scoresRes.json());
+
+                const current = await currentRes.json();
+                setCurrentHandicap(current?.current_handicap_index ?? null);
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        async function init() {
+            // Show whatever's already in the database immediately -- a
+            // Playwright scrape of handicaps.co.za only needs to run once a
+            // day, so most page loads shouldn't wait on it at all.
+            await loadData();
+            setLoading(false);
+
             setSyncing(true);
             setSyncError(null);
 
@@ -100,33 +125,22 @@ function HandicapPage() {
                         body?.detail || "Could not sync with handicaps.co.za"
                     );
                 } else {
-                    setJustSynced(body?.skipped === false);
+                    const didSync = body?.skipped === false;
+                    setJustSynced(didSync);
+
+                    if (didSync) {
+                        await loadData();
+                    }
                 }
             } catch (error) {
                 console.error(error);
                 setSyncError("Could not reach the backend to sync");
-            }
-
-            try {
-                const [historyRes, scoresRes, currentRes] = await Promise.all([
-                    authFetch(`${API}/handicap`),
-                    authFetch(`${API}/handicap/scores`),
-                    authFetch(`${API}/handicap/current`),
-                ]);
-
-                setHistory(await historyRes.json());
-                setScores(await scoresRes.json());
-
-                const current = await currentRes.json();
-                setCurrentHandicap(current?.current_handicap_index ?? null);
-            } catch (error) {
-                console.error(error);
             } finally {
                 setSyncing(false);
             }
         }
 
-        load();
+        init();
     }, []);
 
     const trend = useMemo(() => {
@@ -247,10 +261,12 @@ function HandicapPage() {
                     <h2>Your handicap journey.</h2>
 
                     <p>
-                        {syncing
+                        {loading
                             ? "Loading your handicap history..."
                             : syncError
                             ? `Last sync failed: ${syncError}`
+                            : syncing
+                            ? "Syncing the latest scores from handicaps.co.za in the background..."
                             : justSynced
                             ? "Just synced the latest scores from handicaps.co.za."
                             : "Up to date — this syncs with handicaps.co.za once a day."}
@@ -313,7 +329,7 @@ function HandicapPage() {
                                 </ResponsiveContainer>
                             ) : (
                                 <p className="course-count">
-                                    {syncing
+                                    {loading
                                         ? "Loading your handicap history..."
                                         : "No handicap data yet."}
                                 </p>

@@ -203,6 +203,7 @@ function WellnessPage() {
 
     const [days, setDays] = useState<DailyStat[]>([]);
     const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState<string | null>(null);
     const [justSynced, setJustSynced] = useState(false);
 
@@ -210,7 +211,20 @@ function WellnessPage() {
     const [customStart, setCustomStart] = useState("");
     const [customEnd, setCustomEnd] = useState("");
 
-    async function syncAndLoad(force: boolean) {
+    async function loadData() {
+        try {
+            const response = await authFetch(`${API}/garmin/wellness?days=120`);
+
+            if (response.ok) {
+                setDays(await response.json());
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function sync(force: boolean) {
+        setSyncing(true);
         setSyncError(null);
 
         try {
@@ -226,26 +240,29 @@ function WellnessPage() {
                     body?.detail || "Could not sync with Garmin Connect"
                 );
             } else {
-                setJustSynced(body?.skipped === false);
+                const didSync = body?.skipped === false;
+                setJustSynced(didSync);
+
+                if (didSync) {
+                    await loadData();
+                }
             }
         } catch (error) {
             console.error(error);
             setSyncError("Could not reach the backend to sync");
-        }
-
-        try {
-            const response = await authFetch(`${API}/garmin/wellness?days=120`);
-
-            if (response.ok) {
-                setDays(await response.json());
-            }
-        } catch (error) {
-            console.error(error);
+        } finally {
+            setSyncing(false);
         }
     }
 
     useEffect(() => {
-        syncAndLoad(false).finally(() => setLoading(false));
+        // Show whatever's already synced immediately; the Garmin login +
+        // scrape only needs to run once a day, so most loads shouldn't wait
+        // on it at all.
+        loadData().finally(() => {
+            setLoading(false);
+            sync(false);
+        });
     }, []);
 
     useEffect(() => {
@@ -342,6 +359,8 @@ function WellnessPage() {
                             ? "Loading your wellness data..."
                             : syncError
                             ? `Last sync failed: ${syncError}`
+                            : syncing
+                            ? "Syncing the latest data from Garmin Connect in the background..."
                             : justSynced
                             ? "Just synced the latest data from Garmin Connect."
                             : "Up to date — this syncs with Garmin Connect once a day, or sync now from Settings."}

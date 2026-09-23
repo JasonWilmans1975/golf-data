@@ -59,27 +59,7 @@ function TeesheetPage() {
     const [syncError, setSyncError] = useState<string | null>(null);
     const [justSynced, setJustSynced] = useState(false);
 
-    async function syncAndLoad(force: boolean) {
-        setSyncError(null);
-
-        try {
-            const syncResponse = await authFetch(
-                `${API}/teesheet/sync${force ? "?force=true" : ""}`,
-                { method: "POST" }
-            );
-
-            const body = await syncResponse.json().catch(() => null);
-
-            if (!syncResponse.ok) {
-                setSyncError(body?.detail || "Could not sync with teesheet.co.za");
-            } else {
-                setJustSynced(body?.skipped === false);
-            }
-        } catch (error) {
-            console.error(error);
-            setSyncError("Could not reach the backend to sync");
-        }
-
+    async function loadData() {
         try {
             const [bookingsRes, transactionsRes, balanceRes] = await Promise.all([
                 authFetch(`${API}/teesheet/bookings`),
@@ -95,14 +75,48 @@ function TeesheetPage() {
         }
     }
 
+    async function sync(force: boolean) {
+        setSyncing(true);
+        setSyncError(null);
+
+        try {
+            const syncResponse = await authFetch(
+                `${API}/teesheet/sync${force ? "?force=true" : ""}`,
+                { method: "POST" }
+            );
+
+            const body = await syncResponse.json().catch(() => null);
+
+            if (!syncResponse.ok) {
+                setSyncError(body?.detail || "Could not sync with teesheet.co.za");
+            } else {
+                const didSync = body?.skipped === false;
+                setJustSynced(didSync);
+
+                if (didSync) {
+                    await loadData();
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            setSyncError("Could not reach the backend to sync");
+        } finally {
+            setSyncing(false);
+        }
+    }
+
     useEffect(() => {
-        syncAndLoad(false).finally(() => setLoading(false));
+        // Show whatever's already synced immediately; the teesheet.co.za
+        // login + scrape only needs to run once a day, so most loads
+        // shouldn't wait on it at all.
+        loadData().finally(() => {
+            setLoading(false);
+            sync(false);
+        });
     }, []);
 
     async function handleRefresh() {
-        setSyncing(true);
-        await syncAndLoad(true);
-        setSyncing(false);
+        await sync(true);
     }
 
     return (
@@ -170,6 +184,8 @@ function TeesheetPage() {
                             ? "Loading your teesheet data..."
                             : syncError
                             ? `Last sync failed: ${syncError}`
+                            : syncing
+                            ? "Syncing the latest data from teesheet.co.za in the background..."
                             : justSynced
                             ? "Just synced the latest data from teesheet.co.za."
                             : "Up to date — this syncs with teesheet.co.za once a day."}
