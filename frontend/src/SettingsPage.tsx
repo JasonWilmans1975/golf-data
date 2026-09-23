@@ -43,6 +43,10 @@ function SettingsPage() {
     const [teesheetSyncing, setTeesheetSyncing] = useState(false);
     const [teesheetSyncMessage, setTeesheetSyncMessage] = useState<string | null>(null);
 
+    const [displayName, setDisplayName] = useState("");
+    const [profileSaving, setProfileSaving] = useState(false);
+    const [profileMessage, setProfileMessage] = useState<string | null>(null);
+
     useEffect(() => {
         async function load() {
             try {
@@ -94,10 +98,42 @@ function SettingsPage() {
             } catch (err) {
                 console.error(err);
             }
+
+            try {
+                const response = await authFetch(`${API}/profile`);
+
+                if (response.ok) {
+                    const body = await response.json();
+                    setDisplayName(body.display_name || "");
+                }
+            } catch (err) {
+                console.error(err);
+            }
         }
 
         load();
     }, []);
+
+    async function handleSaveProfile(event: FormEvent) {
+        event.preventDefault();
+        setProfileSaving(true);
+        setProfileMessage(null);
+
+        try {
+            const response = await authFetch(`${API}/profile`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ display_name: displayName }),
+            });
+
+            setProfileMessage(response.ok ? "Saved." : "Could not save your name");
+        } catch (err) {
+            console.error(err);
+            setProfileMessage("Could not reach the backend");
+        } finally {
+            setProfileSaving(false);
+        }
+    }
 
     async function handleConnectStrava() {
         const { data } = await supabase.auth.getSession();
@@ -351,6 +387,13 @@ function SettingsPage() {
                         onClick={() => navigate("/teesheet")}
                     >
                         Teesheet
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/friends")}
+                    >
+                        Friends
                     </button>
 
                     <button className="header-secondary-button" onClick={handleLogout}>
@@ -643,6 +686,46 @@ function SettingsPage() {
                                 {teesheetSyncMessage}
                             </p>
                         )}
+                    </div>
+
+                    <div className="chart-card">
+                        <div className="chart-heading">
+                            <div>
+                                <p className="eyebrow">GOLFBOOK</p>
+                                <h3>Your display name</h3>
+                            </div>
+                        </div>
+
+                        <p className="course-count">
+                            Shown to friends on the Friends page instead of your email.
+                        </p>
+
+                        <form onSubmit={handleSaveProfile}>
+                            <label className="settings-label">
+                                Display name
+                                <input
+                                    className="settings-input"
+                                    value={displayName}
+                                    onChange={(event) => setDisplayName(event.target.value)}
+                                    required
+                                />
+                            </label>
+
+                            <button
+                                className="sync-button"
+                                type="submit"
+                                disabled={profileSaving}
+                                style={{ marginTop: 12 }}
+                            >
+                                {profileSaving ? "Saving..." : "Save name"}
+                            </button>
+
+                            {profileMessage && (
+                                <p className="course-count" style={{ marginTop: 8 }}>
+                                    {profileMessage}
+                                </p>
+                            )}
+                        </form>
                     </div>
 
                     <div className="chart-card">

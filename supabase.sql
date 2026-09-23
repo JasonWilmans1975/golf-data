@@ -201,3 +201,52 @@ create table if not exists public.teesheet_transactions (
   created_at timestamptz default now(),
   unique (user_id, doc_number)
 );
+
+-- Friends / social feed (first slice): a lightweight profile per auth user
+-- (so friends can be found by email and shown by a display name instead of
+-- a raw email), plus a friend_requests table that doubles as the
+-- friendship record once accepted (avoids a separate friendships table).
+
+create table if not exists public.profiles (
+  user_id uuid primary key,
+  email text not null,
+  display_name text,
+  created_at timestamptz default now()
+);
+
+create unique index if not exists profiles_email_idx on public.profiles(lower(email));
+
+-- Keep profiles in sync with auth.users automatically for future signups.
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (user_id, email, display_name)
+  values (new.id, new.email, split_part(new.email, '@', 1))
+  on conflict (user_id) do nothing;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- Backfill existing users (Jason, Brent, etc.) who signed up before this
+-- table existed.
+insert into public.profiles (user_id, email, display_name)
+select id, email, split_part(email, '@', 1) from auth.users
+on conflict (user_id) do nothing;
+
+create table if not exists public.friend_requests (
+  id bigint generated always as identity primary key,
+  from_user_id uuid not null,
+  to_user_id uuid not null,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'declined')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (from_user_id, to_user_id)
+);
+
+create index if not exists friend_requests_to_user_idx on public.friend_requests(to_user_id);
+create index if not exists friend_requests_from_user_idx on public.friend_requests(from_user_id);

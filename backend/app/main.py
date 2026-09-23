@@ -29,6 +29,16 @@ from .teesheet import (
     has_credentials as has_teesheet_credentials,
     sync_teesheet_data,
 )
+from .friends import (
+    get_profile,
+    update_display_name,
+    send_friend_request,
+    list_incoming_requests,
+    respond_to_request,
+    list_friends,
+    remove_friend,
+    get_friends_feed,
+)
 
 COURSE_PHOTOS_BUCKET = "course-photos"
 
@@ -433,3 +443,69 @@ def handicap_scores(limit: int = 50, user_id: str = Depends(get_current_user_id)
     )
 
     return response.data
+
+
+class DisplayNameUpdate(BaseModel):
+    display_name: str
+
+
+@app.get("/profile")
+def profile(user_id: str = Depends(get_current_user_id)):
+    return get_profile(user_id)
+
+
+@app.put("/profile")
+def profile_update(body: DisplayNameUpdate, user_id: str = Depends(get_current_user_id)):
+    try:
+        return update_display_name(user_id, body.display_name)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+
+
+class FriendRequestBody(BaseModel):
+    email: str
+
+
+@app.post("/friends/requests")
+def friends_send_request(body: FriendRequestBody, user_id: str = Depends(get_current_user_id)):
+    try:
+        return send_friend_request(user_id, body.email)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+
+
+@app.get("/friends/requests")
+def friends_incoming_requests(user_id: str = Depends(get_current_user_id)):
+    return list_incoming_requests(user_id)
+
+
+@app.post("/friends/requests/{request_id}/accept")
+def friends_accept_request(request_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        return respond_to_request(user_id, request_id, accept=True)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+
+@app.post("/friends/requests/{request_id}/decline")
+def friends_decline_request(request_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        return respond_to_request(user_id, request_id, accept=False)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+
+@app.get("/friends/feed")
+def friends_feed(limit: int = 30, user_id: str = Depends(get_current_user_id)):
+    return get_friends_feed(user_id, limit=limit)
+
+
+@app.get("/friends")
+def friends_list(user_id: str = Depends(get_current_user_id)):
+    return list_friends(user_id)
+
+
+@app.delete("/friends/{friend_user_id}")
+def friends_remove(friend_user_id: str, user_id: str = Depends(get_current_user_id)):
+    remove_friend(user_id, friend_user_id)
+    return {"removed": True}

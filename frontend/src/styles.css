@@ -703,6 +703,20 @@ button {
     object-fit: cover;
 }
 
+.friend-request-actions {
+    grid-column: 3 / 5;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+@media (max-width: 800px) {
+    .friend-request-actions {
+        grid-column: 1 / 3;
+        justify-content: flex-start;
+    }
+}
+
 @media (max-width: 800px) {
     .round-row {
         grid-template-columns: 1fr 1fr;

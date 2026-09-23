@@ -14,6 +14,7 @@ import MapPage from "./MapPage";
 import HandicapPage from "./HandicapPage";
 import WellnessPage from "./WellnessPage";
 import TeesheetPage from "./TeesheetPage";
+import FriendsPage from "./FriendsPage";
 import LoginPage from "./LoginPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
@@ -344,6 +345,13 @@ function Dashboard() {
                         onClick={() => navigate("/teesheet")}
                     >
                         Teesheet
+                    </button>
+
+                    <button
+                        className="header-secondary-button"
+                        onClick={() => navigate("/friends")}
+                    >
+                        Friends
                     </button>
 
                     <button
@@ -1142,6 +1150,15 @@ function AppRoutes() {
                 element={
                     <RequireAuth>
                         <TeesheetPage />
+                    </RequireAuth>
+                }
+            />
+
+            <Route
+                path="/friends"
+                element={
+                    <RequireAuth>
+                        <FriendsPage />
                     </RequireAuth>
                 }
             />
