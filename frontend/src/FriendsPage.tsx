@@ -21,10 +21,10 @@ type IncomingRequest = {
 };
 
 type FeedItem = {
-    score_id: number;
+    item_id: number;
     user_id: string;
     player_name: string;
-    play_date: string;
+    posted_at: string;
     adjusted_gross: number | null;
     stableford_points: number | null;
     course_name: string | null;
@@ -32,12 +32,17 @@ type FeedItem = {
     country_flag_url: string | null;
 };
 
-function formatDate(value: string) {
+function formatDate(value: string | null | undefined) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+
     return new Intl.DateTimeFormat("en-ZA", {
         day: "numeric",
         month: "short",
         year: "numeric",
-    }).format(new Date(value));
+    }).format(date);
 }
 
 function FriendsPage() {
@@ -333,10 +338,10 @@ function FriendsPage() {
                         </p>
                     ) : (
                         feed.map((item) => (
-                            <div className="round-row" key={item.score_id}>
+                            <div className="round-row" key={item.item_id}>
                                 <div>
                                     <strong>{item.player_name}</strong>
-                                    <span>{formatDate(item.play_date)}</span>
+                                    <span>{formatDate(item.posted_at)}</span>
                                 </div>
 
                                 <div>
