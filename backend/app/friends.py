@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from .db import supabase
+from .db import supabase, fetch_all
 
 
 def _now() -> str:
@@ -178,6 +178,52 @@ def list_friend_ids(user_id: str) -> list[str]:
     ]
 
 
+def _current_handicaps(friend_ids: list[str]) -> dict[str, float | None]:
+    response = (
+        supabase
+        .table("handicap_sync_state")
+        .select("user_id,current_handicap_index")
+        .in_("user_id", friend_ids)
+        .execute()
+    )
+
+    return {row["user_id"]: row["current_handicap_index"] for row in response.data or []}
+
+
+def _home_courses(friend_ids: list[str]) -> dict[str, str | None]:
+    scores = fetch_all(
+        lambda: supabase
+        .table("handicap_scores")
+        .select("user_id,course_id")
+        .in_("user_id", friend_ids)
+        .not_.is_("course_id", "null")
+        .order("id")
+    )
+
+    counts_by_user: dict[str, dict[int, int]] = {}
+
+    for row in scores:
+        course_counts = counts_by_user.setdefault(row["user_id"], {})
+        course_counts[row["course_id"]] = course_counts.get(row["course_id"], 0) + 1
+
+    top_course_id_by_user = {
+        user_id: max(course_counts, key=course_counts.get)
+        for user_id, course_counts in counts_by_user.items()
+    }
+
+    course_ids = list(set(top_course_id_by_user.values()))
+    course_name_by_id = {}
+
+    if course_ids:
+        courses_response = supabase.table("courses").select("id,name").in_("id", course_ids).execute()
+        course_name_by_id = {row["id"]: row["name"] for row in courses_response.data or []}
+
+    return {
+        user_id: course_name_by_id.get(course_id)
+        for user_id, course_id in top_course_id_by_user.items()
+    }
+
+
 def list_friends(user_id: str) -> list[dict]:
     rows = _accepted_relationship_rows(user_id)
 
@@ -193,6 +239,8 @@ def list_friends(user_id: str) -> list[dict]:
         supabase.table("profiles").select("user_id,display_name,email").in_("user_id", friend_ids).execute()
     )
     profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+    handicap_by_user = _current_handicaps(friend_ids)
+    home_course_by_user = _home_courses(friend_ids)
 
     friends = []
     for row in rows:
@@ -201,6 +249,8 @@ def list_friends(user_id: str) -> list[dict]:
             "user_id": friend_id,
             "display_name": _display_name(profile_by_user.get(friend_id)),
             "friends_since": row["updated_at"],
+            "current_handicap_index": handicap_by_user.get(friend_id),
+            "home_course_name": home_course_by_user.get(friend_id),
         })
 
     return friends

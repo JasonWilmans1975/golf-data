@@ -7,6 +7,8 @@ type Friend = {
     user_id: string;
     display_name: string;
     friends_since: string;
+    current_handicap_index: number | null;
+    home_course_name: string | null;
 };
 
 type IncomingRequest = {
@@ -54,7 +56,7 @@ function FriendsPage() {
             const [friendsRes, requestsRes, feedRes] = await Promise.all([
                 authFetch(`${API}/friends`),
                 authFetch(`${API}/friends/requests`),
-                authFetch(`${API}/friends/feed`),
+                authFetch(`${API}/friends/feed?limit=5`),
             ]);
 
             if (friendsRes.ok) setFriends(await friendsRes.json());
@@ -67,6 +69,12 @@ function FriendsPage() {
 
     useEffect(() => {
         loadData().finally(() => setLoading(false));
+
+        // Pick up newly-accepted requests (or new incoming ones) without
+        // requiring a manual refresh -- there's no realtime channel wired
+        // up yet, so a light poll stands in for one.
+        const interval = setInterval(loadData, 15000);
+        return () => clearInterval(interval);
     }, []);
 
     async function handleSendRequest(event: FormEvent) {
@@ -265,16 +273,24 @@ function FriendsPage() {
                                     <span>Friends since {formatDate(friend.friends_since)}</span>
                                 </div>
 
-                                <div className="friend-request-actions">
-                                    <button
-                                        className="header-secondary-button"
-                                        onClick={() =>
-                                            handleRemoveFriend(friend.user_id, friend.display_name)
-                                        }
-                                    >
-                                        Remove
-                                    </button>
+                                <div>
+                                    <strong>{friend.current_handicap_index ?? "—"}</strong>
+                                    <span>Handicap</span>
                                 </div>
+
+                                <div>
+                                    <strong>{friend.home_course_name || "—"}</strong>
+                                    <span>Home course</span>
+                                </div>
+
+                                <button
+                                    className="header-secondary-button"
+                                    onClick={() =>
+                                        handleRemoveFriend(friend.user_id, friend.display_name)
+                                    }
+                                >
+                                    Remove
+                                </button>
                             </div>
                         ))
                     )}
