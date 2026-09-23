@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import { useTheme } from "./useTheme";
 
 const CHART_PALETTES = {
@@ -165,7 +166,7 @@ function StatsPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">MY GOLF JOURNEY</div>
+                    <BrandLogo />
                     <h1>Golf Statistics</h1>
                 </div>
 

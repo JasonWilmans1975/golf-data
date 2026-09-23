@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import BottomNav from "./BottomNav";
 
 type ReactionSummary = {
@@ -117,10 +118,10 @@ function shareText(item: FeedItem | SharedItem) {
     if (item.item_type === "round") {
         return `${item.player_name} played ${item.course_name || "a round of golf"}${
             item.adjusted_gross ? ` and shot ${item.adjusted_gross}` : ""
-        } — via Golf Journey`;
+        } — via GolfCircle`;
     }
 
-    return `${item.player_name} on Golf Journey: ${item.body || ""}`;
+    return `${item.player_name} on GolfCircle: ${item.body || ""}`;
 }
 
 function shareToWhatsApp(item: FeedItem) {
@@ -717,7 +718,7 @@ function FeedPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">MY GOLF JOURNEY</div>
+                    <BrandLogo />
                     <h1>Feed</h1>
                 </div>
 

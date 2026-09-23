@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import FeedNavButton from "./FeedNavButton";
 
 type Friend = {
@@ -177,7 +178,7 @@ function FriendsPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">MY GOLF JOURNEY</div>
+                    <BrandLogo />
                     <h1>Friends</h1>
                 </div>
 

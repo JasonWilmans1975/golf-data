@@ -54,7 +54,7 @@ from .friends import (
 COURSE_PHOTOS_BUCKET = "course-photos"
 POST_PHOTOS_BUCKET = "post-photos"
 
-app = FastAPI(title="Golf Journey API")
+app = FastAPI(title="GolfCircle API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],

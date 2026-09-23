@@ -13,6 +13,7 @@ import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import FeedNavButton from "./FeedNavButton";
 
 type Course = {
@@ -157,9 +158,7 @@ function MapPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">
-                        MY GOLF JOURNEY
-                    </div>
+                    <BrandLogo />
 
                     <h1>World Map</h1>
                 </div>

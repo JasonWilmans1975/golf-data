@@ -51,7 +51,7 @@ function LoginPage() {
     return (
         <div className="auth-page">
             <div className="auth-card">
-                <div className="brand-kicker">MY GOLF JOURNEY</div>
+                <img src="/logo-full.png" alt="GolfCircle" className="auth-logo" />
                 <h1>{mode === "signin" ? "Sign in" : "Create account"}</h1>
 
                 {signupDone ? (

@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import FeedNavButton from "./FeedNavButton";
 import { useTheme } from "./useTheme";
 
@@ -307,7 +308,7 @@ function WellnessPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">MY GOLF JOURNEY</div>
+                    <BrandLogo />
                     <h1>Wellness</h1>
                 </div>
 

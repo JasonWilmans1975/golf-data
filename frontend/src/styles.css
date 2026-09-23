@@ -99,6 +99,18 @@ button {
     color: var(--accent);
 }
 
+.brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.brand-logo-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+}
+
 .topbar h1 {
     margin: 3px 0 0;
     font-size: 21px;
@@ -2052,6 +2064,13 @@ button {
     border-left: 4px solid var(--accent);
     border-radius: 6px;
     padding: 32px;
+}
+
+.auth-logo {
+    height: 28px;
+    width: auto;
+    display: block;
+    margin-bottom: 12px;
 }
 
 .auth-card h1 {

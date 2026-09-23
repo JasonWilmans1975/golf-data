@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import FeedNavButton from "./FeedNavButton";
 
 type Booking = {
@@ -124,7 +125,7 @@ function TeesheetPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">MY GOLF JOURNEY</div>
+                    <BrandLogo />
                     <h1>Teesheet</h1>
                 </div>
 

@@ -37,6 +37,7 @@ import "leaflet/dist/leaflet.css";
 
 import { API, authFetch, uploadCoursePhoto, courseMarkerIcon } from "./api";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 
 type Course = {
     id: number;
@@ -272,11 +273,9 @@ function Dashboard() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">
-                        MY GOLF JOURNEY
-                    </div>
+                    <BrandLogo />
 
-                    <h1>Golf Journey</h1>
+                    <h1>My Rounds</h1>
                 </div>
 
                 <TopbarActions>
@@ -718,9 +717,7 @@ function CourseDetail() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">
-                        GOLF JOURNEY
-                    </div>
+                    <BrandLogo />
 
                     <h1>{course.name}</h1>
                 </div>

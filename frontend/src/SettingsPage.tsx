@@ -4,6 +4,7 @@ import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import FeedNavButton from "./FeedNavButton";
 import { TEESHEET_CLUBS } from "./teesheetClubs";
 
@@ -364,7 +365,7 @@ function SettingsPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">MY GOLF JOURNEY</div>
+                    <BrandLogo />
                     <h1>Settings</h1>
                 </div>
 

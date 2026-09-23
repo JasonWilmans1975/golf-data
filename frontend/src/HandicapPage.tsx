@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
+import BrandLogo from "./BrandLogo";
 import FeedNavButton from "./FeedNavButton";
 import { useTheme } from "./useTheme";
 
@@ -206,7 +207,7 @@ function HandicapPage() {
         <>
             <header className="topbar">
                 <div>
-                    <div className="brand-kicker">MY GOLF JOURNEY</div>
+                    <BrandLogo />
                     <h1>Handicap</h1>
                 </div>
 
