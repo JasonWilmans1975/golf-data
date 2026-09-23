@@ -1277,14 +1277,13 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px 14px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     background: none;
     border: none;
-    border-radius: 6px;
+    border-radius: 50%;
     color: var(--text-muted);
-    font-weight: 700;
-    font-size: 13px;
     cursor: pointer;
 }
 
@@ -1301,21 +1300,6 @@ button {
     flex: 0 0 auto;
     display: flex;
     align-items: stretch;
-}
-
-.reaction-picker-toggle {
-    flex: 0 0 auto;
-    width: 28px;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 6px;
-    font-size: 11px;
-}
-
-.reaction-picker-toggle:hover {
-    background: var(--panel-2);
 }
 
 .reaction-summary {

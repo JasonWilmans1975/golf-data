@@ -263,18 +263,10 @@ function ReactionBar({
             <button
                 type="button"
                 className={`feed-action-button${reactions.my_reaction ? " active" : ""}`}
-                onClick={() => onReact(itemType, itemId, "like")}
-            >
-                {activeEmoji || <ThumbsUpIcon />} {reactions.my_reaction ? "Liked" : "Like"}
-            </button>
-
-            <button
-                type="button"
-                className="reaction-picker-toggle"
-                aria-label="Choose a reaction"
+                aria-label={reactions.my_reaction ? "Liked" : "Like"}
                 onClick={() => onToggleReactionPicker(key)}
             >
-                ▾
+                {activeEmoji || <ThumbsUpIcon />}
             </button>
 
             {reactionPickerOpen === key && (
@@ -1079,9 +1071,10 @@ function FeedPage() {
                                     <button
                                         type="button"
                                         className="feed-action-button"
+                                        aria-label="Comment"
                                         onClick={() => focusCommentInput(key)}
                                     >
-                                        <MessageIcon /> Comment
+                                        <MessageIcon />
                                     </button>
 
                                     <div className="feed-share-wrap">
@@ -1094,7 +1087,6 @@ function FeedPage() {
                                             }
                                         >
                                             <ShareIcon />
-                                            Share
                                         </button>
 
                                         {shareMenuOpen === key && (
