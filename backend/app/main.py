@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -55,6 +56,9 @@ from .friends import (
 COURSE_PHOTOS_BUCKET = "course-photos"
 POST_PHOTOS_BUCKET = "post-photos"
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("golfcircle")
+
 app = FastAPI(title="GolfCircle API")
 app.add_middleware(
     CORSMiddleware,
@@ -67,6 +71,13 @@ app.add_middleware(
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    # This used to swallow every unhandled exception with no trace at all --
+    # every 500 in this app's history has been undiagnosable until now.
+    # Render captures stdout/stderr in its log viewer, so this is enough to
+    # actually find the real error next time, without exposing internals to
+    # the client.
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+
     origin = request.headers.get("origin")
 
     headers = {}

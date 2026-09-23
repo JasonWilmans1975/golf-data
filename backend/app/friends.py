@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from .db import supabase, fetch_all
@@ -543,30 +544,41 @@ def _build_rounds_feed(viewer_id: str, user_ids: list[str], limit: int) -> list[
     if not scores:
         return []
 
-    profiles_response = (
-        supabase
-        .table("profiles")
-        .select("user_id,display_name,email")
-        .in_("user_id", list({score["user_id"] for score in scores}))
-        .execute()
-    )
-    profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+    course_ids = list({score["course_id"] for score in scores if score.get("course_id")})
+    user_ids_seen = list({score["user_id"] for score in scores})
+    round_pairs = [("round", score["score_id"]) for score in scores]
 
-    course_ids = [score["course_id"] for score in scores if score.get("course_id")]
-    course_by_id = {}
+    def _fetch_profiles():
+        response = (
+            supabase.table("profiles").select("user_id,display_name,email").in_("user_id", user_ids_seen).execute()
+        )
+        return {row["user_id"]: row for row in response.data or []}
 
-    if course_ids:
-        courses_response = (
+    def _fetch_courses():
+        if not course_ids:
+            return {}
+        response = (
             supabase
             .table("courses")
             .select("id,name,photo_url,google_photo_url,city,country_name,phone_number")
-            .in_("id", list(set(course_ids)))
+            .in_("id", course_ids)
             .execute()
         )
-        course_by_id = {row["id"]: row for row in courses_response.data or []}
+        return {row["id"]: row for row in response.data or []}
 
-    comment_counts = _comment_counts([("round", score["score_id"]) for score in scores])
-    reactions_by_item = _reaction_summary(viewer_id, [("round", score["score_id"]) for score in scores])
+    # These four queries are all independent (each only depends on `scores`),
+    # so run them concurrently instead of one after another -- this was the
+    # single biggest chunk of sequential latency in loading the Feed.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        profiles_future = pool.submit(_fetch_profiles)
+        courses_future = pool.submit(_fetch_courses)
+        comments_future = pool.submit(_comment_counts, round_pairs)
+        reactions_future = pool.submit(_reaction_summary, viewer_id, round_pairs)
+
+        profile_by_user = profiles_future.result()
+        course_by_id = courses_future.result()
+        comment_counts = comments_future.result()
+        reactions_by_item = reactions_future.result()
 
     feed = []
     for score in scores:
@@ -644,30 +656,46 @@ def get_activity_feed(user_id: str, limit: int = 20, offset: int = 0) -> list[di
     # every page up to this one, then slice the combined, sorted list.
     fetch_count = offset + limit
 
-    rounds = _build_rounds_feed(user_id, circle_ids, fetch_count)
-
-    posts_response = (
-        supabase
-        .table("posts")
-        .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at")
-        .in_("user_id", circle_ids)
-        .order("created_at", desc=True)
-        .limit(fetch_count)
-        .execute()
-    )
-    posts = posts_response.data or []
-
-    if posts:
-        profiles_response = (
+    def _fetch_posts():
+        response = (
             supabase
-            .table("profiles")
-            .select("user_id,display_name,email")
-            .in_("user_id", list({post["user_id"] for post in posts}))
+            .table("posts")
+            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at")
+            .in_("user_id", circle_ids)
+            .order("created_at", desc=True)
+            .limit(fetch_count)
             .execute()
         )
-        profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
-        comment_counts = _comment_counts([("post", post["id"]) for post in posts])
-        reactions_by_item = _reaction_summary(user_id, [("post", post["id"]) for post in posts])
+        return response.data or []
+
+    # Rounds and posts are independent sources -- fetch both concurrently
+    # instead of waiting for the whole rounds feed before even starting on
+    # posts.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        rounds_future = pool.submit(_build_rounds_feed, user_id, circle_ids, fetch_count)
+        posts_future = pool.submit(_fetch_posts)
+
+        rounds = rounds_future.result()
+        posts = posts_future.result()
+
+    if posts:
+        post_user_ids = list({post["user_id"] for post in posts})
+        post_pairs = [("post", post["id"]) for post in posts]
+
+        def _fetch_post_profiles():
+            response = (
+                supabase.table("profiles").select("user_id,display_name,email").in_("user_id", post_user_ids).execute()
+            )
+            return {row["user_id"]: row for row in response.data or []}
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            profiles_future = pool.submit(_fetch_post_profiles)
+            comments_future = pool.submit(_comment_counts, post_pairs)
+            reactions_future = pool.submit(_reaction_summary, user_id, post_pairs)
+
+            profile_by_user = profiles_future.result()
+            comment_counts = comments_future.result()
+            reactions_by_item = reactions_future.result()
 
         for post in posts:
             shared_item = None
@@ -769,15 +797,50 @@ def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
 def list_comments_batch(user_id: str, items: list[tuple[str, int]]) -> dict[str, list[dict]]:
     """Same data as list_comments, but for every Feed card on a page in one
     round trip instead of one request per card -- loading 20 cards used to
-    fire 20 parallel comment requests."""
+    fire 20 parallel comment requests.
+
+    The permission check is batched too: it used to call _item_owner and
+    _can_view_item (which itself re-queries the friend list) once per item,
+    so a 20-card page could cost up to 40 sequential DB round trips before
+    even fetching a single comment. Now it's 3 queries total regardless of
+    how many cards are on the page."""
     keys = [f"{item_type}:{item_id}" for item_type, item_id in items]
     grouped: dict[str, list[dict]] = {key: [] for key in keys}
 
-    allowed = []
-    for item_type, item_id in items:
-        owner_id = _item_owner(item_type, item_id)
-        if owner_id is not None and _can_view_item(user_id, owner_id):
-            allowed.append((item_type, item_id))
+    if not items:
+        return grouped
+
+    round_ids = list({item_id for item_type, item_id in items if item_type == "round"})
+    post_ids = list({item_id for item_type, item_id in items if item_type == "post"})
+
+    def _fetch_round_owners():
+        if not round_ids:
+            return {}
+        response = (
+            supabase.table("handicap_scores").select("score_id,user_id").in_("score_id", round_ids).execute()
+        )
+        return {("round", row["score_id"]): row["user_id"] for row in response.data or []}
+
+    def _fetch_post_owners():
+        if not post_ids:
+            return {}
+        response = supabase.table("posts").select("id,user_id").in_("id", post_ids).execute()
+        return {("post", row["id"]): row["user_id"] for row in response.data or []}
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        round_owners_future = pool.submit(_fetch_round_owners)
+        post_owners_future = pool.submit(_fetch_post_owners)
+        friend_ids_future = pool.submit(list_friend_ids, user_id)
+
+        owner_by_pair = {**round_owners_future.result(), **post_owners_future.result()}
+        friend_ids = set(friend_ids_future.result())
+
+    allowed = [
+        (item_type, item_id)
+        for item_type, item_id in items
+        if owner_by_pair.get((item_type, item_id)) is not None
+        and (owner_by_pair[(item_type, item_id)] == user_id or owner_by_pair[(item_type, item_id)] in friend_ids)
+    ]
 
     if not allowed:
         return grouped
@@ -800,15 +863,21 @@ def list_comments_batch(user_id: str, items: list[tuple[str, int]]) -> dict[str,
     if not rows:
         return grouped
 
-    profiles_response = (
-        supabase
-        .table("profiles")
-        .select("user_id,display_name,email")
-        .in_("user_id", list({row["user_id"] for row in rows}))
-        .execute()
-    )
-    profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
-    reactions_by_comment = _reaction_summary(user_id, [("comment", row["id"]) for row in rows])
+    comment_user_ids = list({row["user_id"] for row in rows})
+    comment_pairs = [("comment", row["id"]) for row in rows]
+
+    def _fetch_comment_profiles():
+        response = (
+            supabase.table("profiles").select("user_id,display_name,email").in_("user_id", comment_user_ids).execute()
+        )
+        return {row["user_id"]: row for row in response.data or []}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        profiles_future = pool.submit(_fetch_comment_profiles)
+        reactions_future = pool.submit(_reaction_summary, user_id, comment_pairs)
+
+        profile_by_user = profiles_future.result()
+        reactions_by_comment = reactions_future.result()
 
     for row in rows:
         key = f"{row['item_type']}:{row['item_id']}"
