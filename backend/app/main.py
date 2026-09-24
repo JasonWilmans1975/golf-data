@@ -19,7 +19,12 @@ from .courses import (
     backfill_course_details,
     get_countries_played,
 )
-from .handicap import sync_handicap_data, save_credentials, get_credentials_status as get_handicap_credentials_status
+from .handicap import (
+    sync_handicap_data,
+    sync_all_users,
+    save_credentials,
+    get_credentials_status as get_handicap_credentials_status,
+)
 from .garmin import (
     sync_garmin_data,
     save_credentials as save_garmin_credentials,
@@ -432,6 +437,17 @@ async def handicap_sync(
         return await sync_handicap_data(user_id, force=force, full_resync=full_resync)
     except RuntimeError as exc:
         raise HTTPException(502, detail=str(exc))
+
+
+@app.post("/internal/sync-all")
+async def internal_sync_all(request: Request):
+    # No user is logged in for a scheduled job -- a shared secret in a
+    # header takes the place of a real session, checked against the same
+    # value configured on the Render Cron Job that calls this.
+    if not settings.cron_secret or request.headers.get("x-cron-secret") != settings.cron_secret:
+        raise HTTPException(401, detail="Not authorized")
+
+    return await sync_all_users()
 
 
 @app.get("/handicap")

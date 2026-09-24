@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -10,6 +11,8 @@ from .crypto import encrypt, decrypt
 from .milestones import check_and_award_milestones
 from .leaderboard import maybe_post_daily_leaderboard
 from .tournaments import maybe_post_tournament_results
+
+logger = logging.getLogger("golfcircle")
 
 HANDICAP_SITE_BASE_URL = "https://www.handicaps.co.za"
 
@@ -284,3 +287,35 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
         "courses_matched": course_match["matched"],
         "courses_created": course_match["created_courses"],
     }
+
+
+def _all_user_ids_with_credentials() -> list[str]:
+    rows = fetch_all(lambda: supabase.table("handicap_credentials").select("user_id").order("user_id"))
+    return [row["user_id"] for row in rows]
+
+
+async def sync_all_users() -> dict:
+    """The nightly batch, run from a scheduled job (see /internal/sync-all)
+    instead of anyone's page visit -- that's what actually keeps this off
+    the critical path and away from real traffic, not just the off-peak
+    timing. Strictly sequential, one headless browser at a time, same
+    reasoning as everywhere else in this module: this is the only sync path
+    with no per-request latency to protect, so there's no reason to trade
+    that safety for speed by running several logins concurrently.
+
+    force=True here because the whole point of a dedicated nightly run is a
+    guaranteed refresh -- skipping someone because they happened to sync
+    earlier that same day would defeat it."""
+    results = {"synced": 0, "skipped": 0, "failed": 0}
+
+    for user_id in _all_user_ids_with_credentials():
+        try:
+            result = await sync_handicap_data(user_id, force=True)
+            results["skipped" if result.get("skipped") else "synced"] += 1
+        except Exception:
+            # One user's expired/invalid credentials shouldn't stop the
+            # batch -- logged so it's visible in Render's log viewer.
+            logger.exception("Nightly sync failed for user %s", user_id)
+            results["failed"] += 1
+
+    return results
