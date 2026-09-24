@@ -230,12 +230,13 @@ function HandicapPage() {
                     <h2>Your handicap journey.</h2>
 
                     <p>
+                        {(loading || syncing) && <span className="spinner" />}
                         {loading
                             ? "Loading your handicap history..."
                             : syncError
                             ? `Last sync failed: ${syncError}`
                             : syncing
-                            ? "Syncing the latest scores from handicaps.co.za in the background..."
+                            ? "Connecting to handicaps.co.za in the background..."
                             : justSynced
                             ? "Just synced the latest scores from handicaps.co.za."
                             : "Up to date — this syncs with handicaps.co.za once a day."}

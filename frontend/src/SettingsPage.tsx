@@ -478,14 +478,22 @@ function SettingsPage() {
                                 disabled={saving || handicapSyncing}
                                 style={{ marginTop: 12 }}
                             >
+                                {(saving || handicapSyncing) && <span className="spinner" />}
                                 {saving
                                     ? "Saving..."
                                     : handicapSyncing
-                                    ? "Syncing..."
+                                    ? "Connecting to handicaps.co.za..."
                                     : connected
                                     ? "Update credentials"
                                     : "Save credentials"}
                             </button>
+
+                            {handicapSyncing && (
+                                <p className="course-count" style={{ marginTop: 8 }}>
+                                    <span className="spinner" />
+                                    This can take up to 15 seconds the first time.
+                                </p>
+                            )}
 
                             {handicapSyncMessage && (
                                 <p className="course-count" style={{ marginTop: 8 }}>
