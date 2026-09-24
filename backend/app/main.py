@@ -53,6 +53,12 @@ from .friends import (
     list_notifications,
 )
 from .leaderboard import get_monthly_leaderboard
+from .tournaments import (
+    create_tournament,
+    list_tournaments,
+    respond_to_tournament,
+    get_tournament_leaderboard,
+)
 
 COURSE_PHOTOS_BUCKET = "course-photos"
 POST_PHOTOS_BUCKET = "post-photos"
@@ -580,6 +586,48 @@ def friends_list(user_id: str = Depends(get_current_user_id)):
 @app.get("/leaderboard")
 def leaderboard(month: str | None = None, user_id: str = Depends(get_current_user_id)):
     return get_monthly_leaderboard(user_id, month=month)
+
+
+class TournamentCreateBody(BaseModel):
+    name: str
+    start_date: str
+    end_date: str
+    invitee_ids: list[str] = []
+
+
+@app.post("/tournaments")
+def tournaments_create(body: TournamentCreateBody, user_id: str = Depends(get_current_user_id)):
+    try:
+        return create_tournament(user_id, body.name, body.start_date, body.end_date, body.invitee_ids)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+
+
+@app.get("/tournaments")
+def tournaments_list(user_id: str = Depends(get_current_user_id)):
+    return list_tournaments(user_id)
+
+
+@app.get("/tournaments/{tournament_id}")
+def tournaments_detail(tournament_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        return get_tournament_leaderboard(user_id, tournament_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+
+class TournamentRespondBody(BaseModel):
+    accept: bool
+
+
+@app.post("/tournaments/{tournament_id}/respond")
+def tournaments_respond(
+    tournament_id: int, body: TournamentRespondBody, user_id: str = Depends(get_current_user_id)
+):
+    try:
+        return respond_to_tournament(user_id, tournament_id, body.accept)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
 
 
 @app.delete("/friends/{friend_user_id}")

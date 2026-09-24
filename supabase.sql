@@ -507,3 +507,27 @@ create table if not exists public.daily_leaderboard_posts (
   post_date date primary key,
   created_at timestamptz default now()
 );
+
+-- Phase 3: tournaments. A creator invites friends; each invitee's row here
+-- is the accept/decline record (same doubles-as-relationship pattern as
+-- friend_requests), and only accepted participants count towards the
+-- tournament's leaderboard once scores land in that date range.
+create table if not exists public.tournaments (
+  id bigint generated always as identity primary key,
+  creator_user_id uuid not null,
+  name text not null,
+  start_date date not null,
+  end_date date not null,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.tournament_participants (
+  tournament_id bigint not null references public.tournaments(id) on delete cascade,
+  user_id uuid not null,
+  status text not null default 'invited' check (status in ('invited', 'accepted', 'declined')),
+  invited_at timestamptz default now(),
+  responded_at timestamptz,
+  primary key (tournament_id, user_id)
+);
+
+create index if not exists tournament_participants_user_id_idx on public.tournament_participants(user_id);

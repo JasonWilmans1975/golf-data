@@ -187,6 +187,7 @@ function FriendsPage() {
                     <NavButton to="/map">World Map</NavButton>
                     <NavButton to="/handicap">Handicap</NavButton>
                     <NavButton to="/leaderboard">Leaderboard</NavButton>
+                    <NavButton to="/tournaments">Tournaments</NavButton>
                     <NavButton to="/wellness">Wellness</NavButton>
                     <NavButton to="/teesheet">Teesheet</NavButton>
                     <FeedNavButton />
