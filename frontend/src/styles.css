@@ -1267,24 +1267,6 @@ button {
     cursor: pointer;
 }
 
-.feed-new-posts-banner {
-    display: block;
-    width: 100%;
-    background: var(--accent);
-    color: var(--accent-text);
-    border: none;
-    border-radius: 6px;
-    padding: 10px;
-    margin-bottom: 12px;
-    font-weight: 700;
-    font-size: 13px;
-    cursor: pointer;
-}
-
-.feed-new-posts-banner:hover {
-    background: var(--accent-bright);
-}
-
 .mention-clickable:hover {
     text-decoration: underline;
 }

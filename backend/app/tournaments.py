@@ -18,6 +18,13 @@ def _profiles_for(user_ids: list[str]) -> dict[str, dict]:
     return {row["user_id"]: row for row in response.data or []}
 
 
+def _tournament_link(tournament_id: int, name: str) -> str:
+    """A tournament name embedded this way in a post body renders as a
+    clickable link straight to that tournament -- see renderBody in
+    FeedPage.tsx for the matching parser."""
+    return f"[[tournament:{tournament_id}:{name}]]"
+
+
 def _format_date_range(start_date: str, end_date: str) -> str:
     start = datetime.strptime(start_date, "%Y-%m-%d").strftime("%-d %b %Y")
 
@@ -71,7 +78,8 @@ def create_tournament(
     invite_note = f" {len(invitee_ids)} friend(s) invited." if invitee_ids else ""
     create_post(
         user_id,
-        f"🏆 Created a new tournament: {name} ({_format_date_range(start_date, end_date)}).{invite_note}",
+        f"🏆 Created a new tournament: {_tournament_link(tournament['id'], name)} "
+        f"({_format_date_range(start_date, end_date)}).{invite_note}",
     )
 
     return tournament
@@ -151,7 +159,10 @@ def respond_to_tournament(user_id: str, tournament_id: int, accept: bool) -> dic
     if accept and not was_already_accepted:
         tournament = _get_tournament(tournament_id)
         if tournament is not None:
-            create_post(user_id, f"🙌 Joined the tournament: {tournament['name']}!")
+            create_post(
+                user_id,
+                f"🙌 Joined the tournament: {_tournament_link(tournament['id'], tournament['name'])}!",
+            )
 
     return {"status": status}
 

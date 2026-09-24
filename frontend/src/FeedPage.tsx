@@ -173,8 +173,30 @@ function ShareIcon() {
     );
 }
 
-function renderBody(body: string, friends: Friend[], onMentionClick: (userId: string) => void) {
-    return body.split(/(@[a-zA-Z0-9._-]+)/g).map((part, index) => {
+const TOURNAMENT_LINK_RE = /^\[\[tournament:(\d+):(.+)\]\]$/;
+
+function renderBody(
+    body: string,
+    friends: Friend[],
+    onMentionClick: (userId: string) => void,
+    onTournamentClick: (tournamentId: number) => void
+) {
+    return body.split(/(@[a-zA-Z0-9._-]+|\[\[tournament:\d+:[^\]]+\]\])/g).map((part, index) => {
+        const tournamentMatch = part.match(TOURNAMENT_LINK_RE);
+
+        if (tournamentMatch) {
+            const [, tournamentId, name] = tournamentMatch;
+            return (
+                <span
+                    className="mention mention-clickable"
+                    key={index}
+                    onClick={() => onTournamentClick(Number(tournamentId))}
+                >
+                    {name}
+                </span>
+            );
+        }
+
         if (!part.startsWith("@")) {
             return <span key={index}>{part}</span>;
         }
@@ -405,7 +427,6 @@ function FeedPage() {
     const [myName, setMyName] = useState("");
     const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
     const [openProfileUserId, setOpenProfileUserId] = useState<string | null>(null);
-    const [newPostsAvailable, setNewPostsAvailable] = useState(false);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
@@ -431,6 +452,10 @@ function FeedPage() {
 
     function focusCommentInput(key: string) {
         commentInputRefs.current[key]?.focus();
+    }
+
+    function handleTournamentClick(tournamentId: number) {
+        navigate(`/tournaments?id=${tournamentId}`);
     }
 
     async function loadComments(key: string, itemType: string, itemId: number) {
@@ -463,7 +488,6 @@ function FeedPage() {
                 setFeed((prev) => (reset ? body.items : [...prev, ...body.items]));
                 setComments((prev) => ({ ...prev, ...body.comments }));
                 setHasMore(body.items.length === PAGE_SIZE);
-                if (reset) setNewPostsAvailable(false);
             }
         } catch (error) {
             console.error(error);
@@ -629,10 +653,13 @@ function FeedPage() {
     }, []);
 
     useEffect(() => {
-        // Facebook-style "new posts" banner instead of silently reordering
-        // the feed under someone mid-scroll -- a friend's new post (or an
-        // auto-post like a milestone/tournament) just flips a flag, and the
-        // viewer chooses when to actually pull it in.
+        // Auto-refresh the feed when a friend's new post lands (or an
+        // auto-post like a milestone/tournament fires), instead of making
+        // someone click a "new posts" banner. Debounced so a burst of
+        // inserts (e.g. several auto-posts firing off one sync) triggers one
+        // reload, not one per row.
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
         const channel = supabase
             .channel("feed-page-new-posts")
             .on(
@@ -640,14 +667,16 @@ function FeedPage() {
                 { event: "INSERT", schema: "public", table: "posts" },
                 (payload) => {
                     const row = payload.new as { user_id?: string } | null;
-                    if (row?.user_id && row.user_id !== myUserId) {
-                        setNewPostsAvailable(true);
-                    }
+                    if (!row?.user_id || row.user_id === myUserId) return;
+
+                    if (debounceTimer) clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(() => loadFeed(true), 500);
                 }
             )
             .subscribe();
 
         return () => {
+            if (debounceTimer) clearTimeout(debounceTimer);
             supabase.removeChannel(channel);
         };
     }, [myUserId]);
@@ -996,12 +1025,6 @@ function FeedPage() {
                     </form>
                 </div>
 
-                {newPostsAvailable && (
-                    <button className="feed-new-posts-banner" onClick={() => loadFeed(true)}>
-                        New posts — tap to refresh
-                    </button>
-                )}
-
                 {loading ? (
                     <div className="loading-card">Loading feed...</div>
                 ) : feed.length === 0 ? (
@@ -1036,7 +1059,7 @@ function FeedPage() {
 
                                 {item.body && (
                                     <p className="feed-post-body">
-                                        {renderBody(item.body, friends, setOpenProfileUserId)}
+                                        {renderBody(item.body, friends, setOpenProfileUserId, handleTournamentClick)}
                                     </p>
                                 )}
 
@@ -1060,7 +1083,7 @@ function FeedPage() {
 
                                         {item.shared_item.body && (
                                             <p className="feed-post-body">
-                                                {renderBody(item.shared_item.body, friends, setOpenProfileUserId)}
+                                                {renderBody(item.shared_item.body, friends, setOpenProfileUserId, handleTournamentClick)}
                                             </p>
                                         )}
 
@@ -1229,7 +1252,7 @@ function FeedPage() {
                                                     <div className="feed-comment-bubble-wrap">
                                                         <div className="feed-comment-bubble">
                                                             <strong>{comment.author_name}</strong>
-                                                            <p>{renderBody(comment.body, friends, setOpenProfileUserId)}</p>
+                                                            <p>{renderBody(comment.body, friends, setOpenProfileUserId, handleTournamentClick)}</p>
                                                         </div>
 
                                                         <div className="feed-comment-meta">

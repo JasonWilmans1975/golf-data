@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { API, authFetch } from "./api";
 import TopbarActions from "./TopbarActions";
 import BrandLogo from "./BrandLogo";
@@ -55,11 +56,14 @@ function formatDateRange(start: string, end: string) {
 }
 
 function TournamentsPage() {
+    const [searchParams] = useSearchParams();
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [friends, setFriends] = useState<Friend[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const [selectedId, setSelectedId] = useState<number | null>(null);
+    const [selectedId, setSelectedId] = useState<number | null>(
+        searchParams.get("id") ? Number(searchParams.get("id")) : null
+    );
     const [detail, setDetail] = useState<TournamentDetail | null>(null);
     const [openProfileUserId, setOpenProfileUserId] = useState<string | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
