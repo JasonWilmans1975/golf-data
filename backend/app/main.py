@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -440,14 +440,23 @@ async def handicap_sync(
 
 
 @app.post("/internal/sync-all")
-async def internal_sync_all(request: Request):
+async def internal_sync_all(background_tasks: BackgroundTasks, request: Request):
     # No user is logged in for a scheduled job -- a shared secret in a
     # header takes the place of a real session, checked against the same
     # value configured on the Render Cron Job that calls this.
     if not settings.cron_secret or request.headers.get("x-cron-secret") != settings.cron_secret:
         raise HTTPException(401, detail="Not authorized")
 
-    return await sync_all_users()
+    # Syncing everyone takes several minutes (one real browser login per
+    # user, strictly sequential) -- almost certainly longer than a cron
+    # runner's own request timeout allows for, which is why calling this
+    # and waiting for the response was silently getting cut off before any
+    # work finished. Responding immediately and running the batch in the
+    # background means the caller's own timeout can never affect it -- the
+    # actual results are only visible via the logs/database afterward, not
+    # in this response.
+    background_tasks.add_task(sync_all_users)
+    return {"started": True}
 
 
 @app.get("/handicap")

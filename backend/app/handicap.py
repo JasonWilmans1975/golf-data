@@ -318,4 +318,8 @@ async def sync_all_users() -> dict:
             logger.exception("Nightly sync failed for user %s", user_id)
             results["failed"] += 1
 
+    # /internal/sync-all now responds before this function even starts (see
+    # its docstring for why), so this is the only place the actual outcome
+    # is visible -- check Render's log viewer for this line.
+    logger.info("Nightly sync-all finished: %s", results)
     return results
