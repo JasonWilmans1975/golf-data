@@ -454,8 +454,11 @@ function FeedPage() {
         commentInputRefs.current[key]?.focus();
     }
 
-    function handleTournamentClick(tournamentId: number) {
-        navigate(`/tournaments?id=${tournamentId}`);
+    function handleTournamentClick(feedPostId: number) {
+        // The token carries the tournament's *original creation post's* id,
+        // not the tournament id -- every mention of it (created, joined)
+        // links back to that one Feed post instead of a separate page.
+        navigate(`/feed?highlight=post:${feedPostId}`);
     }
 
     async function loadComments(key: string, itemType: string, itemId: number) {

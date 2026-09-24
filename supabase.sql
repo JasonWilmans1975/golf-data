@@ -531,3 +531,8 @@ create table if not exists public.tournament_participants (
 );
 
 create index if not exists tournament_participants_user_id_idx on public.tournament_participants(user_id);
+
+-- Tracks the original "created a new tournament" Feed post, so every later
+-- auto-post about this tournament (joins, etc.) can link back to that one
+-- post instead of a separate leaderboard page.
+alter table if exists public.tournaments add column if not exists feed_post_id bigint;

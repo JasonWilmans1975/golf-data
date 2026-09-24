@@ -18,11 +18,13 @@ def _profiles_for(user_ids: list[str]) -> dict[str, dict]:
     return {row["user_id"]: row for row in response.data or []}
 
 
-def _tournament_link(tournament_id: int, name: str) -> str:
+def _tournament_link(feed_post_id: int, name: str) -> str:
     """A tournament name embedded this way in a post body renders as a
-    clickable link straight to that tournament -- see renderBody in
-    FeedPage.tsx for the matching parser."""
-    return f"[[tournament:{tournament_id}:{name}]]"
+    clickable link back to the tournament's original "created" Feed post
+    (not a separate leaderboard page) -- see renderBody in FeedPage.tsx for
+    the matching parser. feed_post_id is that original post's id, so every
+    later auto-post about this tournament points at the same place."""
+    return f"[[tournament:{feed_post_id}:{name}]]"
 
 
 def _format_date_range(start_date: str, end_date: str) -> str:
@@ -76,12 +78,21 @@ def create_tournament(
     supabase.table("tournament_participants").insert(participants).execute()
 
     invite_note = f" {len(invitee_ids)} friend(s) invited." if invitee_ids else ""
-    create_post(
-        user_id,
-        f"🏆 Created a new tournament: {_tournament_link(tournament['id'], name)} "
-        f"({_format_date_range(start_date, end_date)}).{invite_note}",
-    )
+    date_range = _format_date_range(start_date, end_date)
 
+    # The link needs this post's own id, which only exists after inserting
+    # it -- so post the plain-text version first, then patch in the link
+    # once we know it, and remember it on the tournament for later posts
+    # (e.g. a join) to link back to.
+    post = create_post(user_id, f"🏆 Created a new tournament: {name} ({date_range}).{invite_note}")
+
+    linked_body = (
+        f"🏆 Created a new tournament: {_tournament_link(post['id'], name)} ({date_range}).{invite_note}"
+    )
+    supabase.table("posts").update({"body": linked_body}).eq("id", post["id"]).execute()
+    supabase.table("tournaments").update({"feed_post_id": post["id"]}).eq("id", tournament["id"]).execute()
+
+    tournament["feed_post_id"] = post["id"]
     return tournament
 
 
@@ -159,10 +170,12 @@ def respond_to_tournament(user_id: str, tournament_id: int, accept: bool) -> dic
     if accept and not was_already_accepted:
         tournament = _get_tournament(tournament_id)
         if tournament is not None:
-            create_post(
-                user_id,
-                f"🙌 Joined the tournament: {_tournament_link(tournament['id'], tournament['name'])}!",
+            name = (
+                _tournament_link(tournament["feed_post_id"], tournament["name"])
+                if tournament.get("feed_post_id")
+                else tournament["name"]
             )
+            create_post(user_id, f"🙌 Joined the tournament: {name}!")
 
     return {"status": status}
 
