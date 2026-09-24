@@ -260,11 +260,14 @@ create index if not exists friend_requests_from_user_idx on public.friend_reques
 -- connected user would see every other user's friend requests.
 alter table public.friend_requests enable row level security;
 
+-- auth.uid() wrapped in (select ...) below so Postgres evaluates it once per
+-- query (an initplan) instead of once per row -- same access, faster at
+-- scale. See https://supabase.com/docs/guides/database/postgres/row-level-security#call-functions-with-select
 drop policy if exists "Users can view their own friend requests" on public.friend_requests;
 create policy "Users can view their own friend requests"
 on public.friend_requests
 for select
-using (auth.uid() = from_user_id or auth.uid() = to_user_id);
+using ((select auth.uid()) = from_user_id or (select auth.uid()) = to_user_id);
 
 do $$
 begin
@@ -348,35 +351,35 @@ create policy "Users can view relevant likes"
 on public.feed_likes
 for select
 using (
-  auth.uid() = user_id
+  (select auth.uid()) = user_id
   or (item_type = 'round' and exists (
     select 1 from public.handicap_scores hs
     where hs.score_id = feed_likes.item_id
-      and (hs.user_id = auth.uid() or exists (
+      and (hs.user_id = (select auth.uid()) or exists (
         select 1 from public.friend_requests fr
         where fr.status = 'accepted'
-          and ((fr.from_user_id = auth.uid() and fr.to_user_id = hs.user_id)
-            or (fr.to_user_id = auth.uid() and fr.from_user_id = hs.user_id))
+          and ((fr.from_user_id = (select auth.uid()) and fr.to_user_id = hs.user_id)
+            or (fr.to_user_id = (select auth.uid()) and fr.from_user_id = hs.user_id))
       ))
   ))
   or (item_type = 'post' and exists (
     select 1 from public.posts p
     where p.id = feed_likes.item_id
-      and (p.user_id = auth.uid() or exists (
+      and (p.user_id = (select auth.uid()) or exists (
         select 1 from public.friend_requests fr
         where fr.status = 'accepted'
-          and ((fr.from_user_id = auth.uid() and fr.to_user_id = p.user_id)
-            or (fr.to_user_id = auth.uid() and fr.from_user_id = p.user_id))
+          and ((fr.from_user_id = (select auth.uid()) and fr.to_user_id = p.user_id)
+            or (fr.to_user_id = (select auth.uid()) and fr.from_user_id = p.user_id))
       ))
   ))
   or (item_type = 'comment' and exists (
     select 1 from public.feed_comments fc
     where fc.id = feed_likes.item_id
-      and (fc.user_id = auth.uid() or exists (
+      and (fc.user_id = (select auth.uid()) or exists (
         select 1 from public.friend_requests fr
         where fr.status = 'accepted'
-          and ((fr.from_user_id = auth.uid() and fr.to_user_id = fc.user_id)
-            or (fr.to_user_id = auth.uid() and fr.from_user_id = fc.user_id))
+          and ((fr.from_user_id = (select auth.uid()) and fr.to_user_id = fc.user_id)
+            or (fr.to_user_id = (select auth.uid()) and fr.from_user_id = fc.user_id))
       ))
   ))
 );
@@ -388,12 +391,12 @@ create policy "Users can view their own or a friend's posts"
 on public.posts
 for select
 using (
-  user_id = auth.uid()
+  user_id = (select auth.uid())
   or exists (
     select 1 from public.friend_requests fr
     where fr.status = 'accepted'
-      and ((fr.from_user_id = auth.uid() and fr.to_user_id = posts.user_id)
-        or (fr.to_user_id = auth.uid() and fr.from_user_id = posts.user_id))
+      and ((fr.from_user_id = (select auth.uid()) and fr.to_user_id = posts.user_id)
+        or (fr.to_user_id = (select auth.uid()) and fr.from_user_id = posts.user_id))
   )
 );
 
@@ -404,12 +407,12 @@ create policy "Users can view their own or a friend's comments"
 on public.feed_comments
 for select
 using (
-  user_id = auth.uid()
+  user_id = (select auth.uid())
   or exists (
     select 1 from public.friend_requests fr
     where fr.status = 'accepted'
-      and ((fr.from_user_id = auth.uid() and fr.to_user_id = feed_comments.user_id)
-        or (fr.to_user_id = auth.uid() and fr.from_user_id = feed_comments.user_id))
+      and ((fr.from_user_id = (select auth.uid()) and fr.to_user_id = feed_comments.user_id)
+        or (fr.to_user_id = (select auth.uid()) and fr.from_user_id = feed_comments.user_id))
   )
 );
 
