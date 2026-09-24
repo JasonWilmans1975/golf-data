@@ -12,13 +12,15 @@ import { TEESHEET_CLUBS } from "./teesheetClubs";
 function SettingsPage() {
     const navigate = useNavigate();
 
+    const [tab, setTab] = useState<"accounts" | "profile">("accounts");
+
     const [stravaConnected, setStravaConnected] = useState(false);
 
     const [memberNo, setMemberNo] = useState("");
     const [password, setPassword] = useState("");
     const [connected, setConnected] = useState(false);
+    const [handicapEditing, setHandicapEditing] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [handicapSyncing, setHandicapSyncing] = useState(false);
     const [handicapSyncMessage, setHandicapSyncMessage] = useState<string | null>(null);
@@ -26,8 +28,8 @@ function SettingsPage() {
     const [garminEmail, setGarminEmail] = useState("");
     const [garminPassword, setGarminPassword] = useState("");
     const [garminConnected, setGarminConnected] = useState(false);
+    const [garminEditing, setGarminEditing] = useState(false);
     const [garminSaving, setGarminSaving] = useState(false);
-    const [garminSaved, setGarminSaved] = useState(false);
     const [garminError, setGarminError] = useState<string | null>(null);
 
     const [stravaSyncing, setStravaSyncing] = useState(false);
@@ -36,12 +38,12 @@ function SettingsPage() {
     const [garminSyncing, setGarminSyncing] = useState(false);
     const [garminSyncMessage, setGarminSyncMessage] = useState<string | null>(null);
 
-    const [teesheetClubId, setTeesheetClubId] = useState("62");
+    const [teesheetClubId, setTeesheetClubId] = useState("");
     const [teesheetMemberId, setTeesheetMemberId] = useState("");
     const [teesheetPassword, setTeesheetPassword] = useState("");
     const [teesheetConnected, setTeesheetConnected] = useState(false);
+    const [teesheetEditing, setTeesheetEditing] = useState(false);
     const [teesheetSaving, setTeesheetSaving] = useState(false);
-    const [teesheetSaved, setTeesheetSaved] = useState(false);
     const [teesheetError, setTeesheetError] = useState<string | null>(null);
     const [teesheetSyncing, setTeesheetSyncing] = useState(false);
     const [teesheetSyncMessage, setTeesheetSyncMessage] = useState<string | null>(null);
@@ -76,39 +78,39 @@ function SettingsPage() {
             }
 
             try {
-                const response = await authFetch(
-                    `${API}/handicap/credentials/status`
-                );
+                const response = await authFetch(`${API}/handicap/credentials/status`);
 
                 if (response.ok) {
                     const body = await response.json();
                     setConnected(body.connected);
+                    setMemberNo(body.member_no || "");
                 }
             } catch (err) {
                 console.error(err);
             }
 
             try {
-                const response = await authFetch(
-                    `${API}/garmin/credentials/status`
-                );
+                const response = await authFetch(`${API}/garmin/credentials/status`);
 
                 if (response.ok) {
                     const body = await response.json();
                     setGarminConnected(body.connected);
+                    setGarminEmail(body.email || "");
                 }
             } catch (err) {
                 console.error(err);
             }
 
             try {
-                const response = await authFetch(
-                    `${API}/teesheet/credentials/status`
-                );
+                const response = await authFetch(`${API}/teesheet/credentials/status`);
 
                 if (response.ok) {
                     const body = await response.json();
                     setTeesheetConnected(body.connected);
+                    setTeesheetMemberId(body.member_id || "");
+
+                    const club = TEESHEET_CLUBS.find((c) => c.name === body.club_name);
+                    setTeesheetClubId(club ? String(club.id) : "");
                 }
             } catch (err) {
                 console.error(err);
@@ -203,7 +205,6 @@ function SettingsPage() {
         event.preventDefault();
         setError(null);
         setSaving(true);
-        setSaved(false);
         setHandicapSyncMessage(null);
 
         try {
@@ -218,7 +219,6 @@ function SettingsPage() {
             }
 
             setConnected(true);
-            setSaved(true);
             setPassword("");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Something went wrong");
@@ -230,8 +230,11 @@ function SettingsPage() {
         setHandicapSyncing(true);
 
         try {
+            // full_resync=true here specifically -- (re)connecting credentials
+            // is exactly the moment a full history pull is worth the cost,
+            // as a safety net in case anything's changed since last time.
             const syncResponse = await authFetch(
-                `${API}/handicap/sync?force=true`,
+                `${API}/handicap/sync?force=true&full_resync=true`,
                 { method: "POST" }
             );
 
@@ -241,10 +244,34 @@ function SettingsPage() {
                 setHandicapSyncMessage(
                     body?.detail || "Could not sync with handicaps.co.za"
                 );
-            } else if (body?.skipped) {
-                setHandicapSyncMessage("Already up to date.");
             } else {
                 setHandicapSyncMessage(`Synced ${body.synced} rounds.`);
+                setHandicapEditing(false);
+            }
+        } catch (err) {
+            setHandicapSyncMessage("Could not reach the backend to sync");
+        } finally {
+            setHandicapSyncing(false);
+        }
+    }
+
+    async function handleSyncHandicapNow() {
+        setHandicapSyncing(true);
+        setHandicapSyncMessage(null);
+
+        try {
+            const syncResponse = await authFetch(`${API}/handicap/sync?force=true`, {
+                method: "POST",
+            });
+
+            const body = await syncResponse.json().catch(() => null);
+
+            if (!syncResponse.ok) {
+                setHandicapSyncMessage(body?.detail || "Could not sync with handicaps.co.za");
+            } else {
+                setHandicapSyncMessage(
+                    body.synced > 0 ? `Synced ${body.synced} new round${body.synced === 1 ? "" : "s"}.` : "Up to date."
+                );
             }
         } catch (err) {
             setHandicapSyncMessage("Could not reach the backend to sync");
@@ -257,7 +284,6 @@ function SettingsPage() {
         event.preventDefault();
         setGarminError(null);
         setGarminSaving(true);
-        setGarminSaved(false);
 
         try {
             const response = await authFetch(`${API}/garmin/credentials`, {
@@ -274,8 +300,8 @@ function SettingsPage() {
             }
 
             setGarminConnected(true);
-            setGarminSaved(true);
             setGarminPassword("");
+            setGarminEditing(false);
         } catch (err) {
             setGarminError(
                 err instanceof Error ? err.message : "Something went wrong"
@@ -317,7 +343,6 @@ function SettingsPage() {
         event.preventDefault();
         setTeesheetError(null);
         setTeesheetSaving(true);
-        setTeesheetSaved(false);
         setTeesheetSyncMessage(null);
 
         const club = TEESHEET_CLUBS.find((c) => c.id === Number(teesheetClubId));
@@ -345,8 +370,8 @@ function SettingsPage() {
             }
 
             setTeesheetConnected(true);
-            setTeesheetSaved(true);
             setTeesheetPassword("");
+            setTeesheetEditing(false);
         } catch (err) {
             setTeesheetError(
                 err instanceof Error ? err.message : "Something went wrong"
@@ -442,478 +467,507 @@ function SettingsPage() {
             <main className="content">
                 <section className="course-hero">
                     <p className="eyebrow">ACCOUNT</p>
-                    <h2>Connect your accounts.</h2>
-                    <p>
-                        Link your own Strava and handicaps.co.za accounts to see your
-                        own data.
-                    </p>
+                    <h2>Settings</h2>
+
+                    <div className="settings-tabs">
+                        <button
+                            className={tab === "accounts" ? "settings-tab active" : "settings-tab"}
+                            onClick={() => setTab("accounts")}
+                        >
+                            Linked accounts
+                        </button>
+                        <button
+                            className={tab === "profile" ? "settings-tab active" : "settings-tab"}
+                            onClick={() => setTab("profile")}
+                        >
+                            Profile
+                        </button>
+                    </div>
                 </section>
 
-                <section className="chart-grid">
-                    <div className="chart-card">
-                        <div className="chart-heading">
-                            <div>
-                                <p className="eyebrow">STRAVA</p>
-                                <h3>{stravaConnected ? "Connected" : "Not Connected"}</h3>
+                {tab === "accounts" && (
+                    <section className="chart-grid">
+                        <div className="chart-card chart-card-wide">
+                            <div className="chart-heading">
+                                <div>
+                                    <p className="eyebrow">LINKED ACCOUNTS</p>
+                                    <h3>Where your data comes from</h3>
+                                </div>
+                            </div>
+
+                            <div className="integration-list">
+                                <div className="integration-row">
+                                    <div className="integration-row-main">
+                                        <div>
+                                            <strong>Strava</strong>
+                                            <span className="course-count">
+                                                {stravaConnected ? "Connected" : "Not connected"}
+                                            </span>
+                                        </div>
+
+                                        <div className="integration-row-actions">
+                                            {stravaConnected && (
+                                                <button
+                                                    className="sync-button"
+                                                    onClick={handleSyncStrava}
+                                                    disabled={stravaSyncing}
+                                                >
+                                                    {stravaSyncing ? "Syncing..." : "Sync now"}
+                                                </button>
+                                            )}
+                                            <button className="header-secondary-button" onClick={handleConnectStrava}>
+                                                {stravaConnected ? "Reconnect" : "Connect"}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {stravaSyncMessage && <p className="course-count">{stravaSyncMessage}</p>}
+                                </div>
+
+                                <div className="integration-row">
+                                    <div className="integration-row-main">
+                                        <div>
+                                            <strong>Handicaps.co.za</strong>
+                                            <span className="course-count">
+                                                {connected ? `Member #${memberNo}` : "Not connected"}
+                                            </span>
+                                        </div>
+
+                                        <div className="integration-row-actions">
+                                            {connected && !handicapEditing && (
+                                                <button
+                                                    className="sync-button"
+                                                    onClick={handleSyncHandicapNow}
+                                                    disabled={handicapSyncing}
+                                                >
+                                                    {handicapSyncing && <span className="spinner" />}
+                                                    {handicapSyncing ? "Syncing..." : "Sync now"}
+                                                </button>
+                                            )}
+                                            <button
+                                                className="header-secondary-button"
+                                                onClick={() => setHandicapEditing((v) => !v)}
+                                            >
+                                                {!connected ? "Connect" : handicapEditing ? "Cancel" : "Change credentials"}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {(handicapEditing || !connected) && (
+                                        <form className="integration-form" onSubmit={handleSaveCredentials}>
+                                            <label className="settings-label">
+                                                Membership number
+                                                <input
+                                                    className="settings-input"
+                                                    value={memberNo}
+                                                    onChange={(event) => setMemberNo(event.target.value)}
+                                                    required
+                                                />
+                                            </label>
+
+                                            <label className="settings-label">
+                                                Password
+                                                <input
+                                                    className="settings-input"
+                                                    type="password"
+                                                    value={password}
+                                                    onChange={(event) => setPassword(event.target.value)}
+                                                    required
+                                                />
+                                            </label>
+
+                                            {error && <p className="auth-error">{error}</p>}
+
+                                            <button
+                                                className="sync-button"
+                                                type="submit"
+                                                disabled={saving || handicapSyncing}
+                                                style={{ marginTop: 8 }}
+                                            >
+                                                {(saving || handicapSyncing) && <span className="spinner" />}
+                                                {saving
+                                                    ? "Saving..."
+                                                    : handicapSyncing
+                                                    ? "Connecting to handicaps.co.za..."
+                                                    : connected
+                                                    ? "Update credentials"
+                                                    : "Save credentials"}
+                                            </button>
+
+                                            {handicapSyncing && (
+                                                <p className="course-count" style={{ marginTop: 8 }}>
+                                                    This can take up to 15 seconds the first time.
+                                                </p>
+                                            )}
+                                        </form>
+                                    )}
+
+                                    {!handicapEditing && handicapSyncMessage && (
+                                        <p className="course-count">{handicapSyncMessage}</p>
+                                    )}
+                                </div>
+
+                                <div className="integration-row">
+                                    <div className="integration-row-main">
+                                        <div>
+                                            <strong>Garmin Connect</strong>
+                                            <span className="course-count">
+                                                {garminConnected ? garminEmail : "Not connected"}
+                                            </span>
+                                        </div>
+
+                                        <div className="integration-row-actions">
+                                            {garminConnected && !garminEditing && (
+                                                <button
+                                                    className="sync-button"
+                                                    onClick={handleSyncGarmin}
+                                                    disabled={garminSyncing}
+                                                >
+                                                    {garminSyncing ? "Syncing..." : "Sync now"}
+                                                </button>
+                                            )}
+                                            <button
+                                                className="header-secondary-button"
+                                                onClick={() => setGarminEditing((v) => !v)}
+                                            >
+                                                {!garminConnected ? "Connect" : garminEditing ? "Cancel" : "Change credentials"}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {(garminEditing || !garminConnected) && (
+                                        <form className="integration-form" onSubmit={handleSaveGarminCredentials}>
+                                            <label className="settings-label">
+                                                Garmin email
+                                                <input
+                                                    className="settings-input"
+                                                    type="email"
+                                                    value={garminEmail}
+                                                    onChange={(event) => setGarminEmail(event.target.value)}
+                                                    required
+                                                />
+                                            </label>
+
+                                            <label className="settings-label">
+                                                Password
+                                                <input
+                                                    className="settings-input"
+                                                    type="password"
+                                                    value={garminPassword}
+                                                    onChange={(event) => setGarminPassword(event.target.value)}
+                                                    required
+                                                />
+                                            </label>
+
+                                            {garminError && <p className="auth-error">{garminError}</p>}
+
+                                            <button
+                                                className="sync-button"
+                                                type="submit"
+                                                disabled={garminSaving}
+                                                style={{ marginTop: 8 }}
+                                            >
+                                                {garminSaving
+                                                    ? "Saving..."
+                                                    : garminConnected
+                                                    ? "Update credentials"
+                                                    : "Save credentials"}
+                                            </button>
+                                        </form>
+                                    )}
+
+                                    {!garminEditing && garminSyncMessage && (
+                                        <p className="course-count">{garminSyncMessage}</p>
+                                    )}
+                                </div>
+
+                                <div className="integration-row">
+                                    <div className="integration-row-main">
+                                        <div>
+                                            <strong>Teesheet.co.za</strong>
+                                            <span className="course-count">
+                                                {teesheetConnected
+                                                    ? TEESHEET_CLUBS.find((c) => c.id === Number(teesheetClubId))?.name ||
+                                                      "Connected"
+                                                    : "Not connected"}
+                                            </span>
+                                        </div>
+
+                                        <div className="integration-row-actions">
+                                            {teesheetConnected && !teesheetEditing && (
+                                                <button
+                                                    className="sync-button"
+                                                    onClick={() => handleSyncTeesheet(true)}
+                                                    disabled={teesheetSyncing}
+                                                >
+                                                    {teesheetSyncing ? "Syncing..." : "Sync now"}
+                                                </button>
+                                            )}
+                                            <button
+                                                className="header-secondary-button"
+                                                onClick={() => setTeesheetEditing((v) => !v)}
+                                            >
+                                                {!teesheetConnected
+                                                    ? "Connect"
+                                                    : teesheetEditing
+                                                    ? "Cancel"
+                                                    : "Change credentials"}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {(teesheetEditing || !teesheetConnected) && (
+                                        <form className="integration-form" onSubmit={handleSaveTeesheetCredentials}>
+                                            <label className="settings-label">
+                                                Golf club
+                                                <select
+                                                    className="settings-input"
+                                                    value={teesheetClubId}
+                                                    onChange={(event) => setTeesheetClubId(event.target.value)}
+                                                    required
+                                                >
+                                                    <option value="">Select your club</option>
+                                                    {TEESHEET_CLUBS.map((club) => (
+                                                        <option key={club.id} value={club.id}>
+                                                            {club.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </label>
+
+                                            <label className="settings-label">
+                                                Member ID
+                                                <input
+                                                    className="settings-input"
+                                                    value={teesheetMemberId}
+                                                    onChange={(event) => setTeesheetMemberId(event.target.value)}
+                                                    required
+                                                />
+                                            </label>
+
+                                            <label className="settings-label">
+                                                Password
+                                                <input
+                                                    className="settings-input"
+                                                    type="password"
+                                                    value={teesheetPassword}
+                                                    onChange={(event) => setTeesheetPassword(event.target.value)}
+                                                    required
+                                                />
+                                            </label>
+
+                                            {teesheetError && <p className="auth-error">{teesheetError}</p>}
+
+                                            <button
+                                                className="sync-button"
+                                                type="submit"
+                                                disabled={teesheetSaving || teesheetSyncing}
+                                                style={{ marginTop: 8 }}
+                                            >
+                                                {teesheetSaving
+                                                    ? "Saving..."
+                                                    : teesheetSyncing
+                                                    ? "Syncing..."
+                                                    : teesheetConnected
+                                                    ? "Update credentials"
+                                                    : "Save credentials"}
+                                            </button>
+                                        </form>
+                                    )}
+
+                                    {!teesheetEditing && teesheetSyncMessage && (
+                                        <p className="course-count">{teesheetSyncMessage}</p>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
-                        <p className="course-count">
-                            Connect Strava to pull your golf activities and GPS
-                            routes.
-                        </p>
+                        <div className="chart-card">
+                            <div className="chart-heading">
+                                <div>
+                                    <p className="eyebrow">APPEARANCE</p>
+                                    <h3>Theme</h3>
+                                </div>
+                            </div>
 
-                        <button
-                            className="sync-button"
-                            onClick={handleConnectStrava}
-                            style={{ marginTop: 16 }}
-                        >
-                            Connect Strava
-                        </button>
+                            <ThemeToggle />
+                        </div>
+                    </section>
+                )}
 
-                        <button
-                            className="sync-button"
-                            onClick={handleSyncStrava}
-                            disabled={stravaSyncing}
-                            style={{ marginTop: 8, marginLeft: 8 }}
-                        >
-                            {stravaSyncing ? "Syncing..." : "Sync now"}
-                        </button>
+                {tab === "profile" && (
+                    <section className="chart-grid">
+                        <div className="chart-card chart-card-wide">
+                            <div className="chart-heading">
+                                <div>
+                                    <p className="eyebrow">PROFILE</p>
+                                    <h3>Your details</h3>
+                                </div>
+                            </div>
 
-                        {stravaSyncMessage && (
-                            <p className="course-count" style={{ marginTop: 8 }}>
-                                {stravaSyncMessage}
+                            <p className="course-count">
+                                Shown to friends on the Feed and Friends page instead of
+                                your email.
                             </p>
-                        )}
-                    </div>
 
-                    <div className="chart-card">
-                        <div className="chart-heading">
-                            <div>
-                                <p className="eyebrow">HANDICAPS.CO.ZA</p>
-                                <h3>{connected ? "Connected" : "Not Connected"}</h3>
-                            </div>
-                        </div>
-
-                        <form onSubmit={handleSaveCredentials}>
-                            <label className="settings-label">
-                                Membership number
-                                <input
-                                    className="settings-input"
-                                    value={memberNo}
-                                    onChange={(event) =>
-                                        setMemberNo(event.target.value)
+                            <div className="profile-avatar-row">
+                                <div
+                                    className="feed-avatar feed-avatar-small"
+                                    style={
+                                        avatarUrl
+                                            ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: "cover" }
+                                            : undefined
                                     }
-                                    required
-                                />
-                            </label>
-
-                            <label className="settings-label">
-                                Password
-                                <input
-                                    className="settings-input"
-                                    type="password"
-                                    value={password}
-                                    onChange={(event) =>
-                                        setPassword(event.target.value)
-                                    }
-                                    required
-                                />
-                            </label>
-
-                            {error && <p className="auth-error">{error}</p>}
-                            {saved && !handicapSyncing && !handicapSyncMessage && (
-                                <p className="course-count">Saved.</p>
-                            )}
-
-                            <button
-                                className="sync-button"
-                                type="submit"
-                                disabled={saving || handicapSyncing}
-                                style={{ marginTop: 12 }}
-                            >
-                                {(saving || handicapSyncing) && <span className="spinner" />}
-                                {saving
-                                    ? "Saving..."
-                                    : handicapSyncing
-                                    ? "Connecting to handicaps.co.za..."
-                                    : connected
-                                    ? "Update credentials"
-                                    : "Save credentials"}
-                            </button>
-
-                            {handicapSyncing && (
-                                <p className="course-count" style={{ marginTop: 8 }}>
-                                    <span className="spinner" />
-                                    This can take up to 15 seconds the first time.
-                                </p>
-                            )}
-
-                            {handicapSyncMessage && (
-                                <p className="course-count" style={{ marginTop: 8 }}>
-                                    {handicapSyncMessage}
-                                </p>
-                            )}
-                        </form>
-                    </div>
-
-                    <div className="chart-card">
-                        <div className="chart-heading">
-                            <div>
-                                <p className="eyebrow">GARMIN CONNECT</p>
-                                <h3>{garminConnected ? "Connected" : "Not Connected"}</h3>
-                            </div>
-                        </div>
-
-                        <p className="course-count">
-                            No official personal API exists for Garmin Connect,
-                            so this logs in with your real Garmin account
-                            (same as the Garmin Connect app) to pull golf
-                            activities.
-                        </p>
-
-                        <form onSubmit={handleSaveGarminCredentials}>
-                            <label className="settings-label">
-                                Garmin email
-                                <input
-                                    className="settings-input"
-                                    type="email"
-                                    value={garminEmail}
-                                    onChange={(event) =>
-                                        setGarminEmail(event.target.value)
-                                    }
-                                    required
-                                />
-                            </label>
-
-                            <label className="settings-label">
-                                Password
-                                <input
-                                    className="settings-input"
-                                    type="password"
-                                    value={garminPassword}
-                                    onChange={(event) =>
-                                        setGarminPassword(event.target.value)
-                                    }
-                                    required
-                                />
-                            </label>
-
-                            {garminError && (
-                                <p className="auth-error">{garminError}</p>
-                            )}
-                            {garminSaved && (
-                                <p className="course-count">Saved.</p>
-                            )}
-
-                            <button
-                                className="sync-button"
-                                type="submit"
-                                disabled={garminSaving}
-                                style={{ marginTop: 12 }}
-                            >
-                                {garminSaving
-                                    ? "Saving..."
-                                    : garminConnected
-                                    ? "Update credentials"
-                                    : "Save credentials"}
-                            </button>
-                        </form>
-
-                        <button
-                            className="sync-button"
-                            onClick={handleSyncGarmin}
-                            disabled={garminSyncing}
-                            style={{ marginTop: 8 }}
-                        >
-                            {garminSyncing ? "Syncing..." : "Sync now"}
-                        </button>
-
-                        {garminSyncMessage && (
-                            <p className="course-count" style={{ marginTop: 8 }}>
-                                {garminSyncMessage}
-                            </p>
-                        )}
-                    </div>
-
-                    <div className="chart-card">
-                        <div className="chart-heading">
-                            <div>
-                                <p className="eyebrow">TEESHEET.CO.ZA</p>
-                                <h3>{teesheetConnected ? "Connected" : "Not Connected"}</h3>
-                            </div>
-                        </div>
-
-                        <p className="course-count">
-                            Connect teesheet.co.za to pull your tee times and
-                            account balance.
-                        </p>
-
-                        <form onSubmit={handleSaveTeesheetCredentials}>
-                            <label className="settings-label">
-                                Golf club
-                                <select
-                                    className="settings-input"
-                                    value={teesheetClubId}
-                                    onChange={(event) =>
-                                        setTeesheetClubId(event.target.value)
-                                    }
-                                    required
                                 >
-                                    <option value="">Select your club</option>
-                                    {TEESHEET_CLUBS.map((club) => (
-                                        <option key={club.id} value={club.id}>
-                                            {club.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
+                                    {!avatarUrl && (displayName || "?").charAt(0).toUpperCase()}
+                                </div>
 
-                            <label className="settings-label">
-                                Member ID
-                                <input
-                                    className="settings-input"
-                                    value={teesheetMemberId}
-                                    onChange={(event) =>
-                                        setTeesheetMemberId(event.target.value)
-                                    }
-                                    required
-                                />
-                            </label>
-
-                            <label className="settings-label">
-                                Password
-                                <input
-                                    className="settings-input"
-                                    type="password"
-                                    value={teesheetPassword}
-                                    onChange={(event) =>
-                                        setTeesheetPassword(event.target.value)
-                                    }
-                                    required
-                                />
-                            </label>
-
-                            {teesheetError && (
-                                <p className="auth-error">{teesheetError}</p>
-                            )}
-                            {teesheetSaved && !teesheetSyncing && !teesheetSyncMessage && (
-                                <p className="course-count">Saved.</p>
-                            )}
-
-                            <button
-                                className="sync-button"
-                                type="submit"
-                                disabled={teesheetSaving || teesheetSyncing}
-                                style={{ marginTop: 12 }}
-                            >
-                                {teesheetSaving
-                                    ? "Saving..."
-                                    : teesheetSyncing
-                                    ? "Syncing..."
-                                    : teesheetConnected
-                                    ? "Update credentials"
-                                    : "Save credentials"}
-                            </button>
-                        </form>
-
-                        <button
-                            className="sync-button"
-                            onClick={() => handleSyncTeesheet(true)}
-                            disabled={teesheetSyncing || teesheetSaving}
-                            style={{ marginTop: 8 }}
-                        >
-                            {teesheetSyncing ? "Syncing..." : "Sync now"}
-                        </button>
-
-                        {teesheetSyncMessage && (
-                            <p className="course-count" style={{ marginTop: 8 }}>
-                                {teesheetSyncMessage}
-                            </p>
-                        )}
-                    </div>
-
-                    <div className="chart-card">
-                        <div className="chart-heading">
-                            <div>
-                                <p className="eyebrow">PROFILE</p>
-                                <h3>Your details</h3>
-                            </div>
-                        </div>
-
-                        <p className="course-count">
-                            Shown to friends on the Feed and Friends page instead of
-                            your email.
-                        </p>
-
-                        <div className="profile-avatar-row">
-                            <div
-                                className="feed-avatar feed-avatar-small"
-                                style={
-                                    avatarUrl
-                                        ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: "cover" }
-                                        : undefined
-                                }
-                            >
-                                {!avatarUrl && (displayName || "?").charAt(0).toUpperCase()}
+                                <label className="sync-button" style={{ cursor: "pointer" }}>
+                                    {avatarUploading ? "Uploading..." : "Change photo"}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleAvatarChange}
+                                        disabled={avatarUploading}
+                                        style={{ display: "none" }}
+                                    />
+                                </label>
                             </div>
 
-                            <label className="sync-button" style={{ cursor: "pointer" }}>
-                                {avatarUploading ? "Uploading..." : "Change photo"}
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleAvatarChange}
-                                    disabled={avatarUploading}
-                                    style={{ display: "none" }}
-                                />
-                            </label>
-                        </div>
-
-                        <form onSubmit={handleSaveProfile}>
-                            <label className="settings-label">
-                                Name
-                                <input
-                                    className="settings-input"
-                                    value={displayName}
-                                    onChange={(event) => setDisplayName(event.target.value)}
-                                    required
-                                />
-                            </label>
-
-                            <label className="settings-label">
-                                Surname
-                                <input
-                                    className="settings-input"
-                                    value={surname}
-                                    onChange={(event) => setSurname(event.target.value)}
-                                />
-                            </label>
-
-                            <label className="settings-label">
-                                Nickname
-                                <input
-                                    className="settings-input"
-                                    value={nickname}
-                                    onChange={(event) => setNickname(event.target.value)}
-                                />
-                            </label>
-
-                            {nickname.trim() && (
+                            <form onSubmit={handleSaveProfile}>
                                 <label className="settings-label">
-                                    Show friends my
+                                    Name
+                                    <input
+                                        className="settings-input"
+                                        value={displayName}
+                                        onChange={(event) => setDisplayName(event.target.value)}
+                                        required
+                                    />
+                                </label>
+
+                                <label className="settings-label">
+                                    Surname
+                                    <input
+                                        className="settings-input"
+                                        value={surname}
+                                        onChange={(event) => setSurname(event.target.value)}
+                                    />
+                                </label>
+
+                                <label className="settings-label">
+                                    Nickname
+                                    <input
+                                        className="settings-input"
+                                        value={nickname}
+                                        onChange={(event) => setNickname(event.target.value)}
+                                    />
+                                </label>
+
+                                {nickname.trim() && (
+                                    <label className="settings-label">
+                                        Show friends my
+                                        <select
+                                            className="settings-input"
+                                            value={displayPreference}
+                                            onChange={(event) =>
+                                                setDisplayPreference(event.target.value as "name" | "nickname")
+                                            }
+                                        >
+                                            <option value="name">Full name</option>
+                                            <option value="nickname">Nickname</option>
+                                        </select>
+                                    </label>
+                                )}
+
+                                <label className="settings-label">
+                                    Mobile number
+                                    <input
+                                        className="settings-input"
+                                        type="tel"
+                                        value={phone}
+                                        onChange={(event) => setPhone(event.target.value)}
+                                    />
+                                </label>
+
+                                <label className="settings-label">
+                                    Country
+                                    <input
+                                        className="settings-input"
+                                        value={country}
+                                        onChange={(event) => setCountry(event.target.value)}
+                                    />
+                                </label>
+
+                                <label className="settings-label">
+                                    Province
+                                    <input
+                                        className="settings-input"
+                                        value={province}
+                                        onChange={(event) => setProvince(event.target.value)}
+                                    />
+                                </label>
+
+                                <label className="settings-label">
+                                    Date of birth
+                                    <input
+                                        className="settings-input"
+                                        type="date"
+                                        value={dateOfBirth}
+                                        onChange={(event) => setDateOfBirth(event.target.value)}
+                                    />
+                                </label>
+
+                                <label className="settings-label">
+                                    Sex
                                     <select
                                         className="settings-input"
-                                        value={displayPreference}
-                                        onChange={(event) =>
-                                            setDisplayPreference(event.target.value as "name" | "nickname")
-                                        }
+                                        value={sex}
+                                        onChange={(event) => setSex(event.target.value)}
                                     >
-                                        <option value="name">Full name</option>
-                                        <option value="nickname">Nickname</option>
+                                        <option value="">Prefer not to say</option>
+                                        <option value="male">Male</option>
+                                        <option value="female">Female</option>
+                                        <option value="other">Other</option>
+                                        <option value="prefer_not_to_say">Prefer not to say</option>
                                     </select>
                                 </label>
-                            )}
 
-                            <label className="settings-label">
-                                Mobile number
-                                <input
-                                    className="settings-input"
-                                    type="tel"
-                                    value={phone}
-                                    onChange={(event) => setPhone(event.target.value)}
-                                />
-                            </label>
+                                <label className="auth-checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={newsletterOptIn}
+                                        onChange={(event) => setNewsletterOptIn(event.target.checked)}
+                                    />
+                                    Send me the GolfCircle newsletter
+                                </label>
 
-                            <label className="settings-label">
-                                Country
-                                <input
-                                    className="settings-input"
-                                    value={country}
-                                    onChange={(event) => setCountry(event.target.value)}
-                                />
-                            </label>
+                                <label className="auth-checkbox-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={sponsorOptIn}
+                                        onChange={(event) => setSponsorOptIn(event.target.checked)}
+                                    />
+                                    Send me sponsor promotions
+                                </label>
 
-                            <label className="settings-label">
-                                Province
-                                <input
-                                    className="settings-input"
-                                    value={province}
-                                    onChange={(event) => setProvince(event.target.value)}
-                                />
-                            </label>
-
-                            <label className="settings-label">
-                                Date of birth
-                                <input
-                                    className="settings-input"
-                                    type="date"
-                                    value={dateOfBirth}
-                                    onChange={(event) => setDateOfBirth(event.target.value)}
-                                />
-                            </label>
-
-                            <label className="settings-label">
-                                Sex
-                                <select
-                                    className="settings-input"
-                                    value={sex}
-                                    onChange={(event) => setSex(event.target.value)}
+                                <button
+                                    className="sync-button"
+                                    type="submit"
+                                    disabled={profileSaving}
+                                    style={{ marginTop: 12 }}
                                 >
-                                    <option value="">Prefer not to say</option>
-                                    <option value="male">Male</option>
-                                    <option value="female">Female</option>
-                                    <option value="other">Other</option>
-                                    <option value="prefer_not_to_say">Prefer not to say</option>
-                                </select>
-                            </label>
+                                    {profileSaving ? "Saving..." : "Save profile"}
+                                </button>
 
-                            <label className="auth-checkbox-label">
-                                <input
-                                    type="checkbox"
-                                    checked={newsletterOptIn}
-                                    onChange={(event) => setNewsletterOptIn(event.target.checked)}
-                                />
-                                Send me the GolfCircle newsletter
-                            </label>
-
-                            <label className="auth-checkbox-label">
-                                <input
-                                    type="checkbox"
-                                    checked={sponsorOptIn}
-                                    onChange={(event) => setSponsorOptIn(event.target.checked)}
-                                />
-                                Send me sponsor promotions
-                            </label>
-
-                            <button
-                                className="sync-button"
-                                type="submit"
-                                disabled={profileSaving}
-                                style={{ marginTop: 12 }}
-                            >
-                                {profileSaving ? "Saving..." : "Save profile"}
-                            </button>
-
-                            {profileMessage && (
-                                <p className="course-count" style={{ marginTop: 8 }}>
-                                    {profileMessage}
-                                </p>
-                            )}
-                        </form>
-                    </div>
-
-                    <div className="chart-card">
-                        <div className="chart-heading">
-                            <div>
-                                <p className="eyebrow">APPEARANCE</p>
-                                <h3>Theme</h3>
-                            </div>
+                                {profileMessage && (
+                                    <p className="course-count" style={{ marginTop: 8 }}>
+                                        {profileMessage}
+                                    </p>
+                                )}
+                            </form>
                         </div>
-
-                        <ThemeToggle />
-                    </div>
-                </section>
+                    </section>
+                )}
             </main>
         </>
     );

@@ -19,15 +19,15 @@ from .courses import (
     backfill_course_details,
     get_countries_played,
 )
-from .handicap import sync_handicap_data, save_credentials, has_credentials
+from .handicap import sync_handicap_data, save_credentials, get_credentials_status as get_handicap_credentials_status
 from .garmin import (
     sync_garmin_data,
     save_credentials as save_garmin_credentials,
-    has_credentials as has_garmin_credentials,
+    get_credentials_status as get_garmin_credentials_status,
 )
 from .teesheet import (
     save_credentials as save_teesheet_credentials,
-    has_credentials as has_teesheet_credentials,
+    get_credentials_status as get_teesheet_credentials_status,
     sync_teesheet_data,
 )
 from .friends import (
@@ -292,7 +292,8 @@ def garmin_credentials(
 
 @app.get("/garmin/credentials/status")
 def garmin_credentials_status(user_id: str = Depends(get_current_user_id)):
-    return {"connected": has_garmin_credentials(user_id)}
+    status = get_garmin_credentials_status(user_id)
+    return {"connected": status is not None, "email": status["email"] if status else None}
 
 
 @app.post("/garmin/sync")
@@ -340,7 +341,12 @@ def teesheet_credentials(
 
 @app.get("/teesheet/credentials/status")
 def teesheet_credentials_status(user_id: str = Depends(get_current_user_id)):
-    return {"connected": has_teesheet_credentials(user_id)}
+    status = get_teesheet_credentials_status(user_id)
+    return {
+        "connected": status is not None,
+        "club_name": status["club_name"] if status else None,
+        "member_id": status["member_id"] if status else None,
+    }
 
 
 @app.post("/teesheet/sync")
@@ -413,13 +419,16 @@ def handicap_credentials(
 
 @app.get("/handicap/credentials/status")
 def handicap_credentials_status(user_id: str = Depends(get_current_user_id)):
-    return {"connected": has_credentials(user_id)}
+    status = get_handicap_credentials_status(user_id)
+    return {"connected": status is not None, "member_no": status["member_no"] if status else None}
 
 
 @app.post("/handicap/sync")
-async def handicap_sync(force: bool = False, user_id: str = Depends(get_current_user_id)):
+async def handicap_sync(
+    force: bool = False, full_resync: bool = False, user_id: str = Depends(get_current_user_id)
+):
     try:
-        return await sync_handicap_data(user_id, force=force)
+        return await sync_handicap_data(user_id, force=force, full_resync=full_resync)
     except RuntimeError as exc:
         raise HTTPException(502, detail=str(exc))
 

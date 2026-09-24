@@ -34,16 +34,16 @@ def save_credentials(user_id: str, email: str, password: str):
     }).execute()
 
 
-def has_credentials(user_id: str) -> bool:
+def get_credentials_status(user_id: str) -> dict | None:
     response = (
         supabase
         .table("garmin_credentials")
-        .select("user_id")
+        .select("email")
         .eq("user_id", user_id)
         .execute()
     )
 
-    return bool(response.data)
+    return response.data[0] if response.data else None
 
 
 def _get_credentials_row(user_id: str):

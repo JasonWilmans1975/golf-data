@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from playwright.async_api import async_playwright
 
-from .db import supabase
+from .db import supabase, fetch_all
 from .courses import match_handicap_scores_to_courses
 from .crypto import encrypt, decrypt
 from .milestones import check_and_award_milestones
@@ -13,7 +13,8 @@ from .leaderboard import maybe_post_daily_leaderboard
 HANDICAP_SITE_BASE_URL = "https://www.handicaps.co.za"
 
 GET_MY_SCORES_SCRIPT = """
-async () => {
+async (knownScoreIds) => {
+    const known = new Set(knownScoreIds);
     const pageSize = 500;
     let pageNumber = 1;
     let all = [];
@@ -40,7 +41,14 @@ async () => {
         const scores = body.Scores || [];
         all = all.concat(scores);
 
-        if (scores.length < pageSize || all.length >= total) break;
+        // Played rounds don't change once recorded, so once a whole page
+        // comes back entirely as scores we already have stored, everything
+        // on every page after it is old news too -- no need to keep paging
+        // through years of unchanged history on every sync.
+        const pageIsFullyKnown =
+            known.size > 0 && scores.length > 0 && scores.every((s) => known.has(s.ScoreId));
+
+        if (scores.length < pageSize || all.length >= total || pageIsFullyKnown) break;
         pageNumber += 1;
     }
 
@@ -58,16 +66,16 @@ def save_credentials(user_id: str, member_no: str, password: str):
     }).execute()
 
 
-def has_credentials(user_id: str) -> bool:
+def get_credentials_status(user_id: str) -> dict | None:
     response = (
         supabase
         .table("handicap_credentials")
-        .select("user_id")
+        .select("member_no")
         .eq("user_id", user_id)
         .execute()
     )
 
-    return bool(response.data)
+    return response.data[0] if response.data else None
 
 
 def _get_credentials(user_id: str):
@@ -109,14 +117,14 @@ async def _login(page, member_no: str, password: str):
         )
 
 
-async def fetch_handicap_data(member_no: str, password: str) -> dict:
+async def fetch_handicap_data(member_no: str, password: str, known_score_ids: set[int] | None = None) -> dict:
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch()
         page = await browser.new_page()
 
         try:
             await _login(page, member_no, password)
-            scores_result = await page.evaluate(GET_MY_SCORES_SCRIPT)
+            scores_result = await page.evaluate(GET_MY_SCORES_SCRIPT, list(known_score_ids or []))
 
             current_index_result = await page.evaluate(
                 """
@@ -201,6 +209,13 @@ def _already_synced_today(user_id: str) -> bool:
     return last_synced_at.astimezone(timezone.utc).date() == datetime.now(timezone.utc).date()
 
 
+def _known_score_ids(user_id: str) -> set[int]:
+    rows = fetch_all(
+        lambda: supabase.table("handicap_scores").select("score_id").eq("user_id", user_id).order("id")
+    )
+    return {row["score_id"] for row in rows}
+
+
 def _mark_synced_now(user_id: str, current_index):
     supabase.table("handicap_sync_state").upsert({
         "user_id": user_id,
@@ -209,12 +224,20 @@ def _mark_synced_now(user_id: str, current_index):
     }).execute()
 
 
-async def sync_handicap_data(user_id: str, force: bool = False):
+async def sync_handicap_data(user_id: str, force: bool = False, full_resync: bool = False):
     if not force and _already_synced_today(user_id):
         return {"skipped": True, "reason": "Already synced today"}
 
     member_no, password = _get_credentials(user_id)
-    data = await fetch_handicap_data(member_no, password)
+    # Historic rounds don't change once played, so a normal sync only pages
+    # through scores until it catches up to what's already stored -- force
+    # (used by the manual "Sync now" button) only bypasses the once-a-day
+    # gate, it doesn't affect this. full_resync pulls the complete history
+    # instead, and is only used right after (re)connecting credentials, as a
+    # safety net in case a backdated round ever lands in the middle of
+    # someone's history rather than appended at the end.
+    known_score_ids = set() if full_resync else _known_score_ids(user_id)
+    data = await fetch_handicap_data(member_no, password, known_score_ids)
     scores = data["scores"]
 
     rows = []

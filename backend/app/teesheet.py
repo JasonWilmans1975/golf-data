@@ -21,16 +21,16 @@ def save_credentials(user_id: str, club_id: int, club_name: str, member_id: str,
     }).execute()
 
 
-def has_credentials(user_id: str) -> bool:
+def get_credentials_status(user_id: str) -> dict | None:
     response = (
         supabase
         .table("teesheet_credentials")
-        .select("user_id")
+        .select("club_name,member_id")
         .eq("user_id", user_id)
         .execute()
     )
 
-    return bool(response.data)
+    return response.data[0] if response.data else None
 
 
 def _get_credentials(user_id: str):
