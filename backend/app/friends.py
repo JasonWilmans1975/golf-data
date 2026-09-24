@@ -11,13 +11,23 @@ def _now() -> str:
 def _display_name(profile: dict | None) -> str:
     if not profile:
         return "A friend"
-    return profile.get("display_name") or (profile.get("email") or "").split("@")[0] or "A friend"
+
+    if profile.get("display_preference") == "nickname" and profile.get("nickname"):
+        return profile["nickname"]
+
+    full_name = " ".join(filter(None, [profile.get("display_name"), profile.get("surname")])).strip()
+
+    return full_name or profile.get("nickname") or (profile.get("email") or "").split("@")[0] or "A friend"
+
+
+PROFILE_FIELDS = (
+    "user_id,email,display_name,surname,nickname,phone,country,province,"
+    "date_of_birth,sex,avatar_url,display_preference,newsletter_opt_in,sponsor_opt_in"
+)
 
 
 def get_profile(user_id: str) -> dict:
-    response = (
-        supabase.table("profiles").select("user_id,email,display_name").eq("user_id", user_id).limit(1).execute()
-    )
+    response = supabase.table("profiles").select(PROFILE_FIELDS).eq("user_id", user_id).limit(1).execute()
 
     if not response.data:
         return {"user_id": user_id, "email": None, "display_name": None}
@@ -25,15 +35,30 @@ def get_profile(user_id: str) -> dict:
     return response.data[0]
 
 
-def update_display_name(user_id: str, display_name: str) -> dict:
-    display_name = display_name.strip()
+PROFILE_EDITABLE_FIELDS = {
+    "display_name", "surname", "nickname", "phone", "country", "province",
+    "date_of_birth", "sex", "avatar_url", "display_preference",
+    "newsletter_opt_in", "sponsor_opt_in",
+}
 
-    if not display_name:
-        raise ValueError("Display name can't be empty")
 
-    supabase.table("profiles").update({"display_name": display_name}).eq("user_id", user_id).execute()
+def update_profile(user_id: str, fields: dict) -> dict:
+    updates = {key: value for key, value in fields.items() if key in PROFILE_EDITABLE_FIELDS}
 
-    return {"display_name": display_name}
+    if "display_name" in updates:
+        updates["display_name"] = (updates["display_name"] or "").strip()
+        if not updates["display_name"]:
+            raise ValueError("Name can't be empty")
+
+    if "display_preference" in updates and updates["display_preference"] not in ("name", "nickname"):
+        raise ValueError("Invalid display preference")
+
+    if not updates:
+        return get_profile(user_id)
+
+    supabase.table("profiles").update(updates).eq("user_id", user_id).execute()
+
+    return get_profile(user_id)
 
 
 def _find_relationship(user_id: str, other_user_id: str) -> dict | None:
@@ -56,7 +81,7 @@ def send_friend_request(user_id: str, email: str) -> dict:
     email = email.strip().lower()
 
     profile_response = (
-        supabase.table("profiles").select("user_id,display_name,email").ilike("email", email).limit(1).execute()
+        supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference").ilike("email", email).limit(1).execute()
     )
 
     if not profile_response.data:
@@ -120,7 +145,7 @@ def list_incoming_requests(user_id: str) -> list[dict]:
     profiles_response = (
         supabase
         .table("profiles")
-        .select("user_id,display_name,email")
+        .select("user_id,display_name,email,surname,nickname,display_preference")
         .in_("user_id", [row["from_user_id"] for row in requests])
         .execute()
     )
@@ -156,7 +181,7 @@ def list_sent_requests(user_id: str) -> list[dict]:
     profiles_response = (
         supabase
         .table("profiles")
-        .select("user_id,display_name,email")
+        .select("user_id,display_name,email,surname,nickname,display_preference")
         .in_("user_id", [row["to_user_id"] for row in requests])
         .execute()
     )
@@ -287,7 +312,7 @@ def list_friends(user_id: str) -> list[dict]:
     ]
 
     profiles_response = (
-        supabase.table("profiles").select("user_id,display_name,email").in_("user_id", friend_ids).execute()
+        supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference").in_("user_id", friend_ids).execute()
     )
     profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
     handicap_by_user = _current_handicaps(friend_ids)
@@ -472,7 +497,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
                 course = course_response.data[0]
 
         profile_response = (
-            supabase.table("profiles").select("display_name,email").eq("user_id", score["user_id"]).limit(1).execute()
+            supabase.table("profiles").select("display_name,email,surname,nickname,display_preference").eq("user_id", score["user_id"]).limit(1).execute()
         )
         profile = profile_response.data[0] if profile_response.data else None
 
@@ -505,7 +530,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
 
         post = response.data[0]
         profile_response = (
-            supabase.table("profiles").select("display_name,email").eq("user_id", post["user_id"]).limit(1).execute()
+            supabase.table("profiles").select("display_name,email,surname,nickname,display_preference").eq("user_id", post["user_id"]).limit(1).execute()
         )
         profile = profile_response.data[0] if profile_response.data else None
 
@@ -550,7 +575,7 @@ def _build_rounds_feed(viewer_id: str, user_ids: list[str], limit: int) -> list[
 
     def _fetch_profiles():
         response = (
-            supabase.table("profiles").select("user_id,display_name,email").in_("user_id", user_ids_seen).execute()
+            supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference").in_("user_id", user_ids_seen).execute()
         )
         return {row["user_id"]: row for row in response.data or []}
 
@@ -696,7 +721,7 @@ def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
     profiles_response = (
         supabase
         .table("profiles")
-        .select("user_id,display_name,email")
+        .select("user_id,display_name,email,surname,nickname,display_preference")
         .in_("user_id", list({comment["user_id"] for comment in comments}))
         .execute()
     )
@@ -806,7 +831,7 @@ def _fetch_comments_for_pairs(
 
     def _fetch_comment_profiles():
         response = (
-            supabase.table("profiles").select("user_id,display_name,email").in_("user_id", comment_user_ids).execute()
+            supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference").in_("user_id", comment_user_ids).execute()
         )
         return {row["user_id"]: row for row in response.data or []}
 
@@ -908,7 +933,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
     })
 
     def _fetch_profiles():
-        response = supabase.table("profiles").select("user_id,display_name,email").in_("user_id", user_ids).execute()
+        response = supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference").in_("user_id", user_ids).execute()
         return {row["user_id"]: row for row in response.data or []}
 
     def _fetch_courses():
@@ -1137,7 +1162,7 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
 
     actor_ids = list({row["actor_id"] for row in raw})
     profiles_response = (
-        supabase.table("profiles").select("user_id,display_name,email").in_("user_id", actor_ids).execute()
+        supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference").in_("user_id", actor_ids).execute()
     )
     profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
 

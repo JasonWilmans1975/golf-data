@@ -447,3 +447,54 @@ create table if not exists public.milestones (
 );
 
 create index if not exists milestones_user_id_idx on public.milestones(user_id);
+
+-- Fuller registration profile: surname/nickname/contact/demographic fields,
+-- a display-name-vs-nickname preference, and explicit marketing consent
+-- (POPIA requires opt-in consent for direct marketing, so these default to
+-- false rather than being pre-checked).
+alter table if exists public.profiles
+  add column if not exists surname text,
+  add column if not exists nickname text,
+  add column if not exists phone text,
+  add column if not exists country text,
+  add column if not exists province text,
+  add column if not exists date_of_birth date,
+  add column if not exists sex text check (sex in ('male', 'female', 'other', 'prefer_not_to_say')),
+  add column if not exists avatar_url text,
+  add column if not exists display_preference text not null default 'name' check (display_preference in ('name', 'nickname')),
+  add column if not exists newsletter_opt_in boolean not null default false,
+  add column if not exists sponsor_opt_in boolean not null default false,
+  add column if not exists terms_accepted_at timestamptz,
+  add column if not exists terms_version text;
+
+-- Pull the extra fields out of auth.users.raw_user_meta_data (populated by
+-- supabase.auth.signUp's `options.data`) so registration is still one step.
+create or replace function public.handle_new_user()
+returns trigger as $$
+begin
+  insert into public.profiles (
+    user_id, email, display_name, surname, nickname, phone, country, province,
+    date_of_birth, sex, display_preference, newsletter_opt_in, sponsor_opt_in,
+    terms_accepted_at, terms_version
+  )
+  values (
+    new.id,
+    new.email,
+    coalesce(nullif(new.raw_user_meta_data->>'display_name', ''), split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'surname',
+    new.raw_user_meta_data->>'nickname',
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'country',
+    new.raw_user_meta_data->>'province',
+    nullif(new.raw_user_meta_data->>'date_of_birth', '')::date,
+    new.raw_user_meta_data->>'sex',
+    coalesce(nullif(new.raw_user_meta_data->>'display_preference', ''), 'name'),
+    coalesce((new.raw_user_meta_data->>'newsletter_opt_in')::boolean, false),
+    coalesce((new.raw_user_meta_data->>'sponsor_opt_in')::boolean, false),
+    case when new.raw_user_meta_data->>'terms_accepted' = 'true' then now() else null end,
+    new.raw_user_meta_data->>'terms_version'
+  )
+  on conflict (user_id) do nothing;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;

@@ -19,6 +19,7 @@ import FeedPage from "./FeedPage";
 import FeedNavButton from "./FeedNavButton";
 import NavButton from "./NavButton";
 import LoginPage from "./LoginPage";
+import TermsPage from "./TermsPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { supabase } from "./supabaseClient";
@@ -1014,6 +1015,7 @@ function AppRoutes() {
     return (
         <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/terms" element={<TermsPage />} />
 
             <Route
                 path="/"

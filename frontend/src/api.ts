@@ -146,6 +146,24 @@ export async function uploadPostPhoto(file: File) {
     return (await response.json()) as { photo_url: string };
 }
 
+export async function uploadAvatarPhoto(file: File) {
+    const compressed = await compressImage(file, 512, 0.85);
+
+    const formData = new FormData();
+    formData.append("file", compressed);
+
+    const response = await authFetch(`${API}/profile/photo`, {
+        method: "POST",
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to upload photo");
+    }
+
+    return (await response.json()) as { avatar_url: string };
+}
+
 export function courseMarkerIcon(course: {
     name: string;
     photo_url?: string | null;

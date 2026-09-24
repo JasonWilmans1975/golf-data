@@ -32,7 +32,7 @@ from .teesheet import (
 )
 from .friends import (
     get_profile,
-    update_display_name,
+    update_profile,
     send_friend_request,
     list_incoming_requests,
     list_sent_requests,
@@ -469,8 +469,19 @@ def handicap_scores(limit: int = 50, user_id: str = Depends(get_current_user_id)
     return response.data
 
 
-class DisplayNameUpdate(BaseModel):
-    display_name: str
+class ProfileUpdateBody(BaseModel):
+    display_name: str | None = None
+    surname: str | None = None
+    nickname: str | None = None
+    phone: str | None = None
+    country: str | None = None
+    province: str | None = None
+    date_of_birth: str | None = None
+    sex: str | None = None
+    avatar_url: str | None = None
+    display_preference: str | None = None
+    newsletter_opt_in: bool | None = None
+    sponsor_opt_in: bool | None = None
 
 
 @app.get("/profile")
@@ -479,11 +490,32 @@ def profile(user_id: str = Depends(get_current_user_id)):
 
 
 @app.put("/profile")
-def profile_update(body: DisplayNameUpdate, user_id: str = Depends(get_current_user_id)):
+def profile_update(body: ProfileUpdateBody, user_id: str = Depends(get_current_user_id)):
     try:
-        return update_display_name(user_id, body.display_name)
+        return update_profile(user_id, body.model_dump(exclude_unset=True))
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
+
+
+@app.post("/profile/photo")
+async def upload_profile_photo(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    contents = await file.read()
+    extension = (file.filename or "").rsplit(".", 1)[-1].lower() or "jpg"
+    path = f"avatars/{user_id}/{uuid.uuid4().hex}.{extension}"
+
+    supabase.storage.from_(POST_PHOTOS_BUCKET).upload(
+        path,
+        contents,
+        {"content-type": file.content_type or "image/jpeg"},
+    )
+
+    avatar_url = supabase.storage.from_(POST_PHOTOS_BUCKET).get_public_url(path)
+    update_profile(user_id, {"avatar_url": avatar_url})
+
+    return {"avatar_url": avatar_url}
 
 
 class FriendRequestBody(BaseModel):

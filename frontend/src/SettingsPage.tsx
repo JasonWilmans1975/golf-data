@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { API, authFetch } from "./api";
+import { API, authFetch, uploadAvatarPhoto } from "./api";
 import { supabase } from "./supabaseClient";
 import ThemeToggle from "./ThemeToggle";
 import TopbarActions from "./TopbarActions";
@@ -47,6 +47,18 @@ function SettingsPage() {
     const [teesheetSyncMessage, setTeesheetSyncMessage] = useState<string | null>(null);
 
     const [displayName, setDisplayName] = useState("");
+    const [surname, setSurname] = useState("");
+    const [nickname, setNickname] = useState("");
+    const [phone, setPhone] = useState("");
+    const [country, setCountry] = useState("");
+    const [province, setProvince] = useState("");
+    const [dateOfBirth, setDateOfBirth] = useState("");
+    const [sex, setSex] = useState("");
+    const [displayPreference, setDisplayPreference] = useState<"name" | "nickname">("name");
+    const [newsletterOptIn, setNewsletterOptIn] = useState(false);
+    const [sponsorOptIn, setSponsorOptIn] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    const [avatarUploading, setAvatarUploading] = useState(false);
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileMessage, setProfileMessage] = useState<string | null>(null);
 
@@ -108,6 +120,17 @@ function SettingsPage() {
                 if (response.ok) {
                     const body = await response.json();
                     setDisplayName(body.display_name || "");
+                    setSurname(body.surname || "");
+                    setNickname(body.nickname || "");
+                    setPhone(body.phone || "");
+                    setCountry(body.country || "");
+                    setProvince(body.province || "");
+                    setDateOfBirth(body.date_of_birth || "");
+                    setSex(body.sex || "");
+                    setDisplayPreference(body.display_preference === "nickname" ? "nickname" : "name");
+                    setNewsletterOptIn(!!body.newsletter_opt_in);
+                    setSponsorOptIn(!!body.sponsor_opt_in);
+                    setAvatarUrl(body.avatar_url || null);
                 }
             } catch (err) {
                 console.error(err);
@@ -126,15 +149,44 @@ function SettingsPage() {
             const response = await authFetch(`${API}/profile`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ display_name: displayName }),
+                body: JSON.stringify({
+                    display_name: displayName,
+                    surname,
+                    nickname,
+                    phone,
+                    country,
+                    province,
+                    date_of_birth: dateOfBirth || null,
+                    sex: sex || null,
+                    display_preference: displayPreference,
+                    newsletter_opt_in: newsletterOptIn,
+                    sponsor_opt_in: sponsorOptIn,
+                }),
             });
 
-            setProfileMessage(response.ok ? "Saved." : "Could not save your name");
+            setProfileMessage(response.ok ? "Saved." : "Could not save your profile");
         } catch (err) {
             console.error(err);
             setProfileMessage("Could not reach the backend");
         } finally {
             setProfileSaving(false);
+        }
+    }
+
+    async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setAvatarUploading(true);
+
+        try {
+            const { avatar_url } = await uploadAvatarPhoto(file);
+            setAvatarUrl(avatar_url);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setAvatarUploading(false);
+            event.target.value = "";
         }
     }
 
@@ -682,18 +734,43 @@ function SettingsPage() {
                     <div className="chart-card">
                         <div className="chart-heading">
                             <div>
-                                <p className="eyebrow">GOLFBOOK</p>
-                                <h3>Your display name</h3>
+                                <p className="eyebrow">PROFILE</p>
+                                <h3>Your details</h3>
                             </div>
                         </div>
 
                         <p className="course-count">
-                            Shown to friends on the Friends page instead of your email.
+                            Shown to friends on the Feed and Friends page instead of
+                            your email.
                         </p>
+
+                        <div className="profile-avatar-row">
+                            <div
+                                className="feed-avatar feed-avatar-small"
+                                style={
+                                    avatarUrl
+                                        ? { backgroundImage: `url(${avatarUrl})`, backgroundSize: "cover" }
+                                        : undefined
+                                }
+                            >
+                                {!avatarUrl && (displayName || "?").charAt(0).toUpperCase()}
+                            </div>
+
+                            <label className="sync-button" style={{ cursor: "pointer" }}>
+                                {avatarUploading ? "Uploading..." : "Change photo"}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleAvatarChange}
+                                    disabled={avatarUploading}
+                                    style={{ display: "none" }}
+                                />
+                            </label>
+                        </div>
 
                         <form onSubmit={handleSaveProfile}>
                             <label className="settings-label">
-                                Display name
+                                Name
                                 <input
                                     className="settings-input"
                                     value={displayName}
@@ -702,13 +779,118 @@ function SettingsPage() {
                                 />
                             </label>
 
+                            <label className="settings-label">
+                                Surname
+                                <input
+                                    className="settings-input"
+                                    value={surname}
+                                    onChange={(event) => setSurname(event.target.value)}
+                                />
+                            </label>
+
+                            <label className="settings-label">
+                                Nickname
+                                <input
+                                    className="settings-input"
+                                    value={nickname}
+                                    onChange={(event) => setNickname(event.target.value)}
+                                />
+                            </label>
+
+                            {nickname.trim() && (
+                                <label className="settings-label">
+                                    Show friends my
+                                    <select
+                                        className="settings-input"
+                                        value={displayPreference}
+                                        onChange={(event) =>
+                                            setDisplayPreference(event.target.value as "name" | "nickname")
+                                        }
+                                    >
+                                        <option value="name">Full name</option>
+                                        <option value="nickname">Nickname</option>
+                                    </select>
+                                </label>
+                            )}
+
+                            <label className="settings-label">
+                                Mobile number
+                                <input
+                                    className="settings-input"
+                                    type="tel"
+                                    value={phone}
+                                    onChange={(event) => setPhone(event.target.value)}
+                                />
+                            </label>
+
+                            <label className="settings-label">
+                                Country
+                                <input
+                                    className="settings-input"
+                                    value={country}
+                                    onChange={(event) => setCountry(event.target.value)}
+                                />
+                            </label>
+
+                            <label className="settings-label">
+                                Province
+                                <input
+                                    className="settings-input"
+                                    value={province}
+                                    onChange={(event) => setProvince(event.target.value)}
+                                />
+                            </label>
+
+                            <label className="settings-label">
+                                Date of birth
+                                <input
+                                    className="settings-input"
+                                    type="date"
+                                    value={dateOfBirth}
+                                    onChange={(event) => setDateOfBirth(event.target.value)}
+                                />
+                            </label>
+
+                            <label className="settings-label">
+                                Sex
+                                <select
+                                    className="settings-input"
+                                    value={sex}
+                                    onChange={(event) => setSex(event.target.value)}
+                                >
+                                    <option value="">Prefer not to say</option>
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                    <option value="other">Other</option>
+                                    <option value="prefer_not_to_say">Prefer not to say</option>
+                                </select>
+                            </label>
+
+                            <label className="auth-checkbox-label">
+                                <input
+                                    type="checkbox"
+                                    checked={newsletterOptIn}
+                                    onChange={(event) => setNewsletterOptIn(event.target.checked)}
+                                />
+                                Send me the GolfCircle newsletter
+                            </label>
+
+                            <label className="auth-checkbox-label">
+                                <input
+                                    type="checkbox"
+                                    checked={sponsorOptIn}
+                                    onChange={(event) => setSponsorOptIn(event.target.checked)}
+                                />
+                                Send me sponsor promotions
+                            </label>
+
                             <button
                                 className="sync-button"
                                 type="submit"
                                 disabled={profileSaving}
                                 style={{ marginTop: 12 }}
                             >
-                                {profileSaving ? "Saving..." : "Save name"}
+                                {profileSaving ? "Saving..." : "Save profile"}
                             </button>
 
                             {profileMessage && (
