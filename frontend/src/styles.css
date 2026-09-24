@@ -117,6 +117,12 @@ button {
     }
 }
 
+.feed-sync-status {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0 0 10px;
+}
+
 .brand-logo {
     display: flex;
     align-items: center;

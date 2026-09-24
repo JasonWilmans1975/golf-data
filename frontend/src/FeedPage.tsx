@@ -403,6 +403,7 @@ function FeedPage() {
     const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const feedCardRefs = useRef<Record<string, HTMLElement | null>>({});
     const [highlightKey, setHighlightKey] = useState<string | null>(null);
+    const [syncingHandicap, setSyncingHandicap] = useState(false);
 
     function focusCommentInput(key: string) {
         commentInputRefs.current[key]?.focus();
@@ -503,6 +504,29 @@ function FeedPage() {
         }
 
         redirectFirstTimeUsers();
+
+        async function syncHandicapThenRefresh() {
+            // Same "show what's already there, sync in the background" pattern
+            // as HandicapPage -- the Feed shouldn't block on a handicaps.co.za
+            // scrape, but a new round showing up there should still show up
+            // here without the user needing to manually refresh.
+            setSyncingHandicap(true);
+
+            try {
+                const response = await authFetch(`${API}/handicap/sync`, { method: "POST" });
+                const body = await response.json().catch(() => null);
+
+                if (response.ok && body?.skipped === false) {
+                    await loadFeed(true);
+                }
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setSyncingHandicap(false);
+            }
+        }
+
+        syncHandicapThenRefresh();
     }, []);
 
     useEffect(() => {
@@ -823,6 +847,11 @@ function FeedPage() {
 
             <main className="content">
                 <div className="feed-container">
+                {syncingHandicap && (
+                    <p className="feed-sync-status">
+                        <span className="spinner" /> Syncing your latest handicap scores...
+                    </p>
+                )}
                 <div className="feed-card">
                     {shareTarget && (
                         <div className="feed-share-preview">
