@@ -19,6 +19,7 @@ function SettingsPage() {
     const [memberNo, setMemberNo] = useState("");
     const [password, setPassword] = useState("");
     const [connected, setConnected] = useState(false);
+    const [needsReconnect, setNeedsReconnect] = useState(false);
     const [handicapEditing, setHandicapEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -87,6 +88,7 @@ function SettingsPage() {
                     const body = await response.json();
                     setConnected(body.connected);
                     setMemberNo(body.member_no || "");
+                    setNeedsReconnect(!!body.needs_reconnect);
                 }
             } catch (err) {
                 console.error(err);
@@ -236,6 +238,7 @@ function SettingsPage() {
             }
 
             setConnected(true);
+            setNeedsReconnect(false);
             setPassword("");
         } catch (err) {
             setError(err instanceof Error ? err.message : "Something went wrong");
@@ -286,6 +289,7 @@ function SettingsPage() {
             if (!syncResponse.ok) {
                 setHandicapSyncMessage(body?.detail || "Could not sync with handicaps.co.za");
             } else {
+                setNeedsReconnect(false);
                 setHandicapSyncMessage(
                     body.synced > 0 ? `Synced ${body.synced} new round${body.synced === 1 ? "" : "s"}.` : "Up to date."
                 );
@@ -555,8 +559,15 @@ function SettingsPage() {
                                     <div className="integration-row-main">
                                         <div>
                                             <strong>Handicaps.co.za</strong>
-                                            <span className="course-count">
-                                                {connected ? `Member #${memberNo}` : "Not connected"}
+                                            <span
+                                                className="course-count"
+                                                style={needsReconnect ? { color: "var(--error)" } : undefined}
+                                            >
+                                                {!connected
+                                                    ? "Not connected"
+                                                    : needsReconnect
+                                                    ? `⚠️ Member #${memberNo} — reconnect needed`
+                                                    : `Member #${memberNo}`}
                                             </span>
                                         </div>
 

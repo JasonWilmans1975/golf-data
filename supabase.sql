@@ -544,3 +544,10 @@ alter table if exists public.tournaments add column if not exists feed_post_id b
 -- fires from the next handicap sync after end_date -- the "is null" update
 -- in maybe_post_tournament_results is what makes it post exactly once).
 alter table if exists public.tournaments add column if not exists results_posted_at timestamptz;
+
+-- Set the moment handicaps.co.za genuinely rejects a member number/password
+-- (not a network hiccup) -- the nightly batch skips anyone flagged here
+-- instead of retrying a known-bad password every night, and it's cleared
+-- automatically the moment a login succeeds again (re-saving credentials,
+-- or even a transient rejection clearing up on its own).
+alter table if exists public.handicap_credentials add column if not exists invalid_since timestamptz;

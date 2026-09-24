@@ -67,6 +67,10 @@ def save_credentials(user_id: str, member_no: str, password: str):
         "member_no": member_no,
         "encrypted_password": encrypt(password),
         "updated_at": datetime.now(timezone.utc).isoformat(),
+        # (Re)saving is an explicit "trust this again" signal, so any
+        # earlier rejection no longer applies -- the next sync gets a clean
+        # attempt instead of being permanently skipped by the nightly batch.
+        "invalid_since": None,
     }).execute()
 
 
@@ -74,12 +78,22 @@ def get_credentials_status(user_id: str) -> dict | None:
     response = (
         supabase
         .table("handicap_credentials")
-        .select("member_no")
+        .select("member_no,invalid_since")
         .eq("user_id", user_id)
         .execute()
     )
 
     return response.data[0] if response.data else None
+
+
+def _mark_credentials_invalid(user_id: str) -> None:
+    supabase.table("handicap_credentials").update({
+        "invalid_since": datetime.now(timezone.utc).isoformat(),
+    }).eq("user_id", user_id).execute()
+
+
+def _mark_credentials_valid(user_id: str) -> None:
+    supabase.table("handicap_credentials").update({"invalid_since": None}).eq("user_id", user_id).execute()
 
 
 def _get_credentials(user_id: str):
@@ -101,6 +115,13 @@ def _get_credentials(user_id: str):
     return row["member_no"], decrypt(row["encrypted_password"])
 
 
+class InvalidCredentialsError(RuntimeError):
+    """Specifically a rejected member number/password, as opposed to any
+    other RuntimeError (e.g. no credentials saved at all) -- so
+    sync_handicap_data can tell a genuinely-bad password apart from
+    everything else and only flag that case."""
+
+
 async def _login(page, member_no: str, password: str):
     await page.goto(
         f"{HANDICAP_SITE_BASE_URL}/login?view=login", wait_until="networkidle"
@@ -116,7 +137,7 @@ async def _login(page, member_no: str, password: str):
         pass
 
     if "/login" in page.url:
-        raise RuntimeError(
+        raise InvalidCredentialsError(
             "handicaps.co.za rejected the membership number or password"
         )
 
@@ -241,7 +262,19 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
     # safety net in case a backdated round ever lands in the middle of
     # someone's history rather than appended at the end.
     known_score_ids = set() if full_resync else _known_score_ids(user_id)
-    data = await fetch_handicap_data(member_no, password, known_score_ids)
+
+    try:
+        data = await fetch_handicap_data(member_no, password, known_score_ids)
+    except InvalidCredentialsError:
+        _mark_credentials_invalid(user_id)
+        raise
+
+    # A successful login proves the credentials are good right now, even if
+    # they were flagged invalid before (e.g. a past rejection that turned
+    # out to be transient) -- clearing it here is what lets the nightly
+    # batch pick this account back up automatically instead of it staying
+    # skipped until someone re-saves the password.
+    _mark_credentials_valid(user_id)
     scores = data["scores"]
 
     rows = []
@@ -290,7 +323,17 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
 
 
 def _all_user_ids_with_credentials() -> list[str]:
-    rows = fetch_all(lambda: supabase.table("handicap_credentials").select("user_id").order("user_id"))
+    # Skips anyone already flagged invalid_since -- there's no point (and
+    # real downside, given handicaps.co.za can flag repeated bad attempts as
+    # abuse) in retrying a password we already know was rejected, every
+    # single night, until they've actually reconnected.
+    rows = fetch_all(
+        lambda: supabase
+        .table("handicap_credentials")
+        .select("user_id")
+        .is_("invalid_since", "null")
+        .order("user_id")
+    )
     return [row["user_id"] for row in rows]
 
 

@@ -426,7 +426,11 @@ def handicap_credentials(
 @app.get("/handicap/credentials/status")
 def handicap_credentials_status(user_id: str = Depends(get_current_user_id)):
     status = get_handicap_credentials_status(user_id)
-    return {"connected": status is not None, "member_no": status["member_no"] if status else None}
+    return {
+        "connected": status is not None,
+        "member_no": status["member_no"] if status else None,
+        "needs_reconnect": bool(status and status.get("invalid_since")),
+    }
 
 
 @app.post("/handicap/sync")
