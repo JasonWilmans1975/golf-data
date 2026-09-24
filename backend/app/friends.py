@@ -649,84 +649,6 @@ def create_post(
     return response.data[0]
 
 
-def get_activity_feed(user_id: str, limit: int = 20, offset: int = 0) -> list[dict]:
-    circle_ids = list(set(list_friend_ids(user_id) + [user_id]))
-    # There's no single "feed" table to page over -- rounds and posts are
-    # merged and re-sorted here -- so fetch enough of each source to cover
-    # every page up to this one, then slice the combined, sorted list.
-    fetch_count = offset + limit
-
-    def _fetch_posts():
-        response = (
-            supabase
-            .table("posts")
-            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at")
-            .in_("user_id", circle_ids)
-            .order("created_at", desc=True)
-            .limit(fetch_count)
-            .execute()
-        )
-        return response.data or []
-
-    # Rounds and posts are independent sources -- fetch both concurrently
-    # instead of waiting for the whole rounds feed before even starting on
-    # posts.
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        rounds_future = pool.submit(_build_rounds_feed, user_id, circle_ids, fetch_count)
-        posts_future = pool.submit(_fetch_posts)
-
-        rounds = rounds_future.result()
-        posts = posts_future.result()
-
-    if posts:
-        post_user_ids = list({post["user_id"] for post in posts})
-        post_pairs = [("post", post["id"]) for post in posts]
-
-        def _fetch_post_profiles():
-            response = (
-                supabase.table("profiles").select("user_id,display_name,email").in_("user_id", post_user_ids).execute()
-            )
-            return {row["user_id"]: row for row in response.data or []}
-
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            profiles_future = pool.submit(_fetch_post_profiles)
-            comments_future = pool.submit(_comment_counts, post_pairs)
-            reactions_future = pool.submit(_reaction_summary, user_id, post_pairs)
-
-            profile_by_user = profiles_future.result()
-            comment_counts = comments_future.result()
-            reactions_by_item = reactions_future.result()
-
-        for post in posts:
-            shared_item = None
-            if post.get("shared_item_type") and post.get("shared_item_id"):
-                shared_item = _snapshot_item(post["shared_item_type"], post["shared_item_id"])
-
-            rounds.append({
-                "item_type": "post",
-                "item_id": post["id"],
-                "user_id": post["user_id"],
-                "player_name": _display_name(profile_by_user.get(post["user_id"])),
-                "posted_at": post["created_at"],
-                "body": post["body"],
-                "photo_url": post.get("photo_url"),
-                "shared_item": shared_item,
-                "adjusted_gross": None,
-                "stableford_points": None,
-                "course_name": None,
-                "course_photo_url": None,
-                "course_phone": None,
-                "country_name": None,
-                "country_flag_url": None,
-                "comment_count": comment_counts.get(("post", post["id"]), 0),
-                "reactions": reactions_by_item.get(("post", post["id"]), _empty_reactions()),
-            })
-
-    rounds.sort(key=lambda item: str(item["posted_at"]), reverse=True)
-
-    return rounds[offset:offset + limit]
-
-
 def _item_owner(item_type: str, item_id: int) -> str | None:
     if item_type not in ("round", "post"):
         return None
@@ -911,15 +833,163 @@ def _fetch_comments_for_pairs(
 
 def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int = 0) -> dict:
     """/feed's actual response: the feed items plus every item's comments in
-    one round trip, instead of the frontend waiting for /feed to land and
-    then firing a second request to /feed/comments/batch."""
-    items = get_activity_feed(user_id, limit=limit, offset=offset)
-    pairs = [(item["item_type"], item["item_id"]) for item in items]
+    one round trip.
 
-    return {
-        "items": items,
-        "comments": _fetch_comments_for_pairs(user_id, pairs),
-    }
+    Every Supabase query costs ~400-500ms of fixed overhead regardless of
+    payload size, so the win here isn't parallelizing more queries -- it's
+    cutting the number of *sequential stages* the request has to wait
+    through. This runs in 3 stages total:
+      1. list_friend_ids -- needed before anything else can be scoped.
+      2. scores + posts, concurrently (independent sources).
+      3. profiles + courses + reactions + comments, all concurrently, since
+         none of them depend on each other -- only on the (item_type, item_id)
+         pairs known right after stage 2. Comment counts are derived from the
+         comment rows already fetched here instead of a separate count query.
+    """
+    circle_ids = list(set(list_friend_ids(user_id) + [user_id]))
+    # There's no single "feed" table to page over -- rounds and posts are
+    # merged and re-sorted here -- so fetch enough of each source to cover
+    # every page up to this one, then slice the combined, sorted list.
+    fetch_count = offset + limit
+
+    def _fetch_scores():
+        response = (
+            supabase
+            .table("handicap_scores")
+            .select(
+                "score_id,user_id,play_date,adjusted_gross,stableford_points,"
+                "course_id,course_name,country_name,country_flag_url"
+            )
+            .in_("user_id", circle_ids)
+            .order("play_date", desc=True)
+            .limit(fetch_count)
+            .execute()
+        )
+        return response.data or []
+
+    def _fetch_posts():
+        response = (
+            supabase
+            .table("posts")
+            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at")
+            .in_("user_id", circle_ids)
+            .order("created_at", desc=True)
+            .limit(fetch_count)
+            .execute()
+        )
+        return response.data or []
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        scores_future = pool.submit(_fetch_scores)
+        posts_future = pool.submit(_fetch_posts)
+
+        scores = scores_future.result()
+        posts = posts_future.result()
+
+    entries = [
+        {"item_type": "round", "item_id": score["score_id"], "posted_at": score["play_date"], "raw": score}
+        for score in scores
+    ] + [
+        {"item_type": "post", "item_id": post["id"], "posted_at": post["created_at"], "raw": post}
+        for post in posts
+    ]
+    entries.sort(key=lambda entry: str(entry["posted_at"]), reverse=True)
+    page = entries[offset:offset + limit]
+
+    if not page:
+        return {"items": [], "comments": {}}
+
+    pairs = [(entry["item_type"], entry["item_id"]) for entry in page]
+    user_ids = list({entry["raw"]["user_id"] for entry in page})
+    course_ids = list({
+        entry["raw"]["course_id"]
+        for entry in page
+        if entry["item_type"] == "round" and entry["raw"].get("course_id")
+    })
+
+    def _fetch_profiles():
+        response = supabase.table("profiles").select("user_id,display_name,email").in_("user_id", user_ids).execute()
+        return {row["user_id"]: row for row in response.data or []}
+
+    def _fetch_courses():
+        if not course_ids:
+            return {}
+        response = (
+            supabase
+            .table("courses")
+            .select("id,name,photo_url,google_photo_url,city,country_name,phone_number")
+            .in_("id", course_ids)
+            .execute()
+        )
+        return {row["id"]: row for row in response.data or []}
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        profiles_future = pool.submit(_fetch_profiles)
+        courses_future = pool.submit(_fetch_courses)
+        reactions_future = pool.submit(_reaction_summary, user_id, pairs)
+        comments_future = pool.submit(_fetch_comments_for_pairs, user_id, pairs)
+
+        profile_by_user = profiles_future.result()
+        course_by_id = courses_future.result()
+        reactions_by_item = reactions_future.result()
+        comments_by_key = comments_future.result()
+
+    items = []
+    for entry in page:
+        raw = entry["raw"]
+        item_type = entry["item_type"]
+        item_id = entry["item_id"]
+        key = f"{item_type}:{item_id}"
+        comment_count = len(comments_by_key.get(key, []))
+        reactions = reactions_by_item.get((item_type, item_id), _empty_reactions())
+
+        if item_type == "round":
+            course = course_by_id.get(raw.get("course_id"), {})
+            items.append({
+                "item_type": "round",
+                "item_id": item_id,
+                "user_id": raw["user_id"],
+                "player_name": _display_name(profile_by_user.get(raw["user_id"])),
+                "posted_at": raw["play_date"],
+                "body": None,
+                "photo_url": None,
+                "shared_item": None,
+                "adjusted_gross": raw.get("adjusted_gross"),
+                "stableford_points": raw.get("stableford_points"),
+                "course_name": course.get("name") or raw.get("course_name"),
+                "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
+                "course_phone": course.get("phone_number"),
+                "country_name": raw.get("country_name") or course.get("country_name"),
+                "country_flag_url": raw.get("country_flag_url"),
+                "comment_count": comment_count,
+                "reactions": reactions,
+            })
+        else:
+            shared_item = None
+            if raw.get("shared_item_type") and raw.get("shared_item_id"):
+                shared_item = _snapshot_item(raw["shared_item_type"], raw["shared_item_id"])
+
+            items.append({
+                "item_type": "post",
+                "item_id": item_id,
+                "user_id": raw["user_id"],
+                "player_name": _display_name(profile_by_user.get(raw["user_id"])),
+                "posted_at": raw["created_at"],
+                "body": raw["body"],
+                "photo_url": raw.get("photo_url"),
+                "shared_item": shared_item,
+                "adjusted_gross": None,
+                "stableford_points": None,
+                "course_name": None,
+                "course_photo_url": None,
+                "course_phone": None,
+                "country_name": None,
+                "country_flag_url": None,
+                "comment_count": comment_count,
+                "reactions": reactions,
+            })
+
+    return {"items": items, "comments": comments_by_key}
 
 
 def add_comment(user_id: str, item_type: str, item_id: int, body: str) -> dict:
