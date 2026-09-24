@@ -133,15 +133,25 @@ def _my_participant_row(tournament_id: int, user_id: str) -> dict | None:
 
 
 def respond_to_tournament(user_id: str, tournament_id: int, accept: bool) -> dict:
-    if _my_participant_row(tournament_id, user_id) is None:
+    participant = _my_participant_row(tournament_id, user_id)
+
+    if participant is None:
         raise ValueError("Not found")
 
     status = "accepted" if accept else "declined"
+    was_already_accepted = participant["status"] == "accepted"
 
     supabase.table("tournament_participants").update({
         "status": status,
         "responded_at": datetime.now(timezone.utc).isoformat(),
     }).eq("tournament_id", tournament_id).eq("user_id", user_id).execute()
+
+    # Only announce the actual transition into "accepted" -- not a decline,
+    # and not a no-op re-accept.
+    if accept and not was_already_accepted:
+        tournament = _get_tournament(tournament_id)
+        if tournament is not None:
+            create_post(user_id, f"🙌 Joined the tournament: {tournament['name']}!")
 
     return {"status": status}
 
