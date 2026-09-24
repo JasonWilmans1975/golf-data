@@ -63,9 +63,10 @@ function SettingsPage() {
     const [avatarUploading, setAvatarUploading] = useState(false);
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileMessage, setProfileMessage] = useState<string | null>(null);
+    const [statusLoading, setStatusLoading] = useState(true);
 
     useEffect(() => {
-        async function load() {
+        async function loadStrava() {
             try {
                 const response = await authFetch(`${API}/strava/status`);
 
@@ -76,7 +77,9 @@ function SettingsPage() {
             } catch (err) {
                 console.error(err);
             }
+        }
 
+        async function loadHandicap() {
             try {
                 const response = await authFetch(`${API}/handicap/credentials/status`);
 
@@ -88,7 +91,9 @@ function SettingsPage() {
             } catch (err) {
                 console.error(err);
             }
+        }
 
+        async function loadGarmin() {
             try {
                 const response = await authFetch(`${API}/garmin/credentials/status`);
 
@@ -100,7 +105,9 @@ function SettingsPage() {
             } catch (err) {
                 console.error(err);
             }
+        }
 
+        async function loadTeesheet() {
             try {
                 const response = await authFetch(`${API}/teesheet/credentials/status`);
 
@@ -115,7 +122,9 @@ function SettingsPage() {
             } catch (err) {
                 console.error(err);
             }
+        }
 
+        async function loadProfile() {
             try {
                 const response = await authFetch(`${API}/profile`);
 
@@ -139,7 +148,15 @@ function SettingsPage() {
             }
         }
 
-        load();
+        // These 5 requests are all independent -- firing them together
+        // instead of one after another is both faster and avoids rendering
+        // the "not connected" defaults (form open, initials shown) for the
+        // time it'd otherwise take to work through them in sequence, which
+        // is what looked like the page rendering an old layout before
+        // flipping to the real one.
+        Promise.all([loadStrava(), loadHandicap(), loadGarmin(), loadTeesheet(), loadProfile()]).finally(() =>
+            setStatusLoading(false)
+        );
     }, []);
 
     async function handleSaveProfile(event: FormEvent) {
@@ -502,6 +519,10 @@ function SettingsPage() {
                             </div>
 
                             <div className="integration-list">
+                            {statusLoading ? (
+                                <p className="course-count">Checking connected accounts...</p>
+                            ) : (
+                                <>
                                 <div className="integration-row">
                                     <div className="integration-row-main">
                                         <div>
@@ -785,6 +806,8 @@ function SettingsPage() {
                                         <p className="course-count">{teesheetSyncMessage}</p>
                                     )}
                                 </div>
+                                </>
+                            )}
                             </div>
                         </div>
                     </section>
@@ -805,6 +828,10 @@ function SettingsPage() {
                                 your email.
                             </p>
 
+                            {statusLoading ? (
+                                <p className="course-count">Loading your profile...</p>
+                            ) : (
+                            <>
                             <div className="profile-avatar-row">
                                 <div
                                     className="feed-avatar feed-avatar-small"
@@ -960,6 +987,8 @@ function SettingsPage() {
                                     </p>
                                 )}
                             </form>
+                            </>
+                            )}
                         </div>
                     </section>
                 )}
