@@ -1932,10 +1932,39 @@ button {
     grid-column: 1 / -1;
 }
 
+.settings-header {
+    margin-bottom: 18px;
+}
+
+.settings-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.settings-header-top h2 {
+    font-size: 18px;
+    font-weight: 800;
+    margin: 0;
+}
+
+.settings-appearance-inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+}
+
 .settings-tabs {
     display: flex;
     gap: 4px;
-    margin-top: 16px;
+    margin-top: 14px;
     border-bottom: 1px solid var(--border);
 }
 
@@ -1994,10 +2023,28 @@ button {
     flex-shrink: 0;
 }
 
-.integration-row-actions .sync-button,
-.integration-row-actions .header-secondary-button {
+.integration-row-actions .sync-button {
     padding: 6px 12px;
     font-size: 12px;
+}
+
+.integration-action-button {
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.integration-action-button:hover {
+    background: var(--panel-2);
+    border-color: var(--accent);
 }
 
 .integration-form {

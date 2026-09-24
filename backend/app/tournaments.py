@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from .db import supabase, fetch_all
-from .friends import list_friend_ids, _display_name
+from .friends import list_friend_ids, _display_name, create_post
 
 
 def _profiles_for(user_ids: list[str]) -> dict[str, dict]:
@@ -16,6 +16,16 @@ def _profiles_for(user_ids: list[str]) -> dict[str, dict]:
         .execute()
     )
     return {row["user_id"]: row for row in response.data or []}
+
+
+def _format_date_range(start_date: str, end_date: str) -> str:
+    start = datetime.strptime(start_date, "%Y-%m-%d").strftime("%-d %b %Y")
+
+    if start_date == end_date:
+        return start
+
+    end = datetime.strptime(end_date, "%Y-%m-%d").strftime("%-d %b %Y")
+    return f"{start} – {end}"
 
 
 def create_tournament(
@@ -57,6 +67,12 @@ def create_tournament(
     ]
 
     supabase.table("tournament_participants").insert(participants).execute()
+
+    invite_note = f" {len(invitee_ids)} friend(s) invited." if invitee_ids else ""
+    create_post(
+        user_id,
+        f"🏆 Created a new tournament: {name} ({_format_date_range(start_date, end_date)}).{invite_note}",
+    )
 
     return tournament
 

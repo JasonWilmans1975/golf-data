@@ -465,9 +465,15 @@ function SettingsPage() {
             </header>
 
             <main className="content">
-                <section className="course-hero">
-                    <p className="eyebrow">ACCOUNT</p>
-                    <h2>Settings</h2>
+                <section className="settings-header">
+                    <div className="settings-header-top">
+                        <h2>Settings</h2>
+
+                        <div className="settings-appearance-inline">
+                            <span>Appearance</span>
+                            <ThemeToggle />
+                        </div>
+                    </div>
 
                     <div className="settings-tabs">
                         <button
@@ -515,7 +521,7 @@ function SettingsPage() {
                                                     {stravaSyncing ? "Syncing..." : "Sync now"}
                                                 </button>
                                             )}
-                                            <button className="header-secondary-button" onClick={handleConnectStrava}>
+                                            <button className="integration-action-button" onClick={handleConnectStrava}>
                                                 {stravaConnected ? "Reconnect" : "Connect"}
                                             </button>
                                         </div>
@@ -545,7 +551,7 @@ function SettingsPage() {
                                                 </button>
                                             )}
                                             <button
-                                                className="header-secondary-button"
+                                                className="integration-action-button"
                                                 onClick={() => setHandicapEditing((v) => !v)}
                                             >
                                                 {!connected ? "Connect" : handicapEditing ? "Cancel" : "Change credentials"}
@@ -627,7 +633,7 @@ function SettingsPage() {
                                                 </button>
                                             )}
                                             <button
-                                                className="header-secondary-button"
+                                                className="integration-action-button"
                                                 onClick={() => setGarminEditing((v) => !v)}
                                             >
                                                 {!garminConnected ? "Connect" : garminEditing ? "Cancel" : "Change credentials"}
@@ -704,7 +710,7 @@ function SettingsPage() {
                                                 </button>
                                             )}
                                             <button
-                                                className="header-secondary-button"
+                                                className="integration-action-button"
                                                 onClick={() => setTeesheetEditing((v) => !v)}
                                             >
                                                 {!teesheetConnected
@@ -780,17 +786,6 @@ function SettingsPage() {
                                     )}
                                 </div>
                             </div>
-                        </div>
-
-                        <div className="chart-card">
-                            <div className="chart-heading">
-                                <div>
-                                    <p className="eyebrow">APPEARANCE</p>
-                                    <h3>Theme</h3>
-                                </div>
-                            </div>
-
-                            <ThemeToggle />
                         </div>
                     </section>
                 )}
