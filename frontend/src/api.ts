@@ -7,11 +7,36 @@ export async function authFetch(url: string, options: RequestInit = {}) {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
 
-    return fetch(url, {
+    const response = await fetch(url, {
         ...options,
         headers: {
             ...(options.headers || {}),
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+    });
+
+    if (response.status !== 401) {
+        return response;
+    }
+
+    // The access token can go stale while the tab is backgrounded --
+    // mobile browsers suspend JS timers when the app isn't in the
+    // foreground, so Supabase's own auto-refresh doesn't get a chance to
+    // run before the token expires. Force a refresh and retry once instead
+    // of just failing silently, which is what made data "not come back"
+    // after returning to the app on a phone.
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    const refreshedToken = refreshed.session?.access_token;
+
+    if (!refreshedToken || refreshedToken === token) {
+        return response;
+    }
+
+    return fetch(url, {
+        ...options,
+        headers: {
+            ...(options.headers || {}),
+            Authorization: `Bearer ${refreshedToken}`,
         },
     });
 }
