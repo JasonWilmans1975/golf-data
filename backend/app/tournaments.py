@@ -180,6 +180,116 @@ def respond_to_tournament(user_id: str, tournament_id: int, accept: bool) -> dic
     return {"status": status}
 
 
+def _claim_tournament_results(tournament_id: int) -> bool:
+    """Atomically claims posting this tournament's results -- the WHERE
+    results_posted_at is null means only whichever sync call runs this
+    first gets rows back, so results post exactly once even if several
+    participants' syncs race for it."""
+    response = (
+        supabase
+        .table("tournaments")
+        .update({"results_posted_at": datetime.now(timezone.utc).isoformat()})
+        .eq("id", tournament_id)
+        .is_("results_posted_at", "null")
+        .execute()
+    )
+    return bool(response.data)
+
+
+def maybe_post_tournament_results(user_id: str) -> None:
+    """Called after a handicap sync. There's no cron in this backend, so a
+    tournament's final results post the next time any of its accepted
+    participants syncs after the tournament's last day -- usually within
+    hours for a group that syncs daily, just not at the exact stroke of
+    midnight."""
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    my_participation = (
+        supabase
+        .table("tournament_participants")
+        .select("tournament_id")
+        .eq("user_id", user_id)
+        .eq("status", "accepted")
+        .execute()
+    )
+    tournament_ids = [row["tournament_id"] for row in my_participation.data or []]
+
+    if not tournament_ids:
+        return
+
+    ended_response = (
+        supabase
+        .table("tournaments")
+        .select("*")
+        .in_("id", tournament_ids)
+        .lt("end_date", today)
+        .is_("results_posted_at", "null")
+        .execute()
+    )
+
+    for tournament in ended_response.data or []:
+        if not _claim_tournament_results(tournament["id"]):
+            continue
+
+        participants_response = (
+            supabase
+            .table("tournament_participants")
+            .select("user_id")
+            .eq("tournament_id", tournament["id"])
+            .eq("status", "accepted")
+            .execute()
+        )
+        accepted_ids = [row["user_id"] for row in participants_response.data or []]
+
+        scores = (
+            fetch_all(
+                lambda: supabase
+                .table("handicap_scores")
+                .select("user_id,adjusted_gross,stableford_points")
+                .in_("user_id", accepted_ids)
+                .gte("play_date", tournament["start_date"])
+                .lte("play_date", tournament["end_date"])
+                .order("id")
+            )
+            if accepted_ids
+            else []
+        )
+
+        stats_by_user: dict[str, dict] = {
+            uid: {"total_stableford": 0, "total_gross": 0} for uid in accepted_ids
+        }
+
+        for score in scores:
+            entry = stats_by_user[score["user_id"]]
+            entry["total_stableford"] += score.get("stableford_points") or 0
+            entry["total_gross"] += score.get("adjusted_gross") or 0
+
+        ranked = sorted(
+            accepted_ids,
+            key=lambda uid: (-stats_by_user[uid]["total_stableford"], stats_by_user[uid]["total_gross"]),
+        )
+
+        link = (
+            _tournament_link(tournament["feed_post_id"], tournament["name"])
+            if tournament.get("feed_post_id")
+            else tournament["name"]
+        )
+
+        if not ranked:
+            create_post(user_id, f"🏁 {link} has ended — no scores were recorded.")
+            continue
+
+        profile_by_user = _profiles_for(ranked)
+        medals = ["🥇", "🥈", "🥉"]
+        lines = [
+            f"{medals[i] if i < len(medals) else f'{i + 1}.'} "
+            f"{_display_name(profile_by_user.get(uid))} — {stats_by_user[uid]['total_stableford']} pts"
+            for i, uid in enumerate(ranked)
+        ]
+
+        create_post(user_id, f"🏁 Final results: {link}\n" + "\n".join(lines))
+
+
 def get_tournament_leaderboard(user_id: str, tournament_id: int) -> dict:
     """Only ever readable by someone the creator invited (accepted, declined,
     or still pending) -- same "you're not in it, you can't see it" model as

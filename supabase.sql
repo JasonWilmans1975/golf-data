@@ -536,3 +536,8 @@ create index if not exists tournament_participants_user_id_idx on public.tournam
 -- auto-post about this tournament (joins, etc.) can link back to that one
 -- post instead of a separate leaderboard page.
 alter table if exists public.tournaments add column if not exists feed_post_id bigint;
+
+-- Lock for the results auto-post (there's no cron in this backend, so this
+-- fires from the next handicap sync after end_date -- the "is null" update
+-- in maybe_post_tournament_results is what makes it post exactly once).
+alter table if exists public.tournaments add column if not exists results_posted_at timestamptz;
