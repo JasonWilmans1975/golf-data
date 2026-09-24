@@ -41,7 +41,7 @@ from .friends import (
     list_friends,
     remove_friend,
     get_friends_feed,
-    get_activity_feed,
+    get_activity_feed_with_comments,
     create_post,
     list_comments,
     list_comments_batch,
@@ -552,7 +552,7 @@ def friends_remove(friend_user_id: str, user_id: str = Depends(get_current_user_
 
 @app.get("/feed")
 def activity_feed(limit: int = 20, offset: int = 0, user_id: str = Depends(get_current_user_id)):
-    return get_activity_feed(user_id, limit=limit, offset=offset)
+    return get_activity_feed_with_comments(user_id, limit=limit, offset=offset)
 
 
 class PostBody(BaseModel):

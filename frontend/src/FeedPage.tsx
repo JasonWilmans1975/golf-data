@@ -388,7 +388,6 @@ function FeedPage() {
     const sentinelRef = useRef<HTMLDivElement>(null);
 
     const [comments, setComments] = useState<Record<string, Comment[]>>({});
-    const [commentsLoading, setCommentsLoading] = useState<Set<string>>(new Set());
     const [drafts, setDrafts] = useState<Record<string, string>>({});
     const [posting, setPosting] = useState<Set<string>>(new Set());
 
@@ -410,8 +409,6 @@ function FeedPage() {
     }
 
     async function loadComments(key: string, itemType: string, itemId: number) {
-        setCommentsLoading((prev) => new Set(prev).add(key));
-
         try {
             const response = await authFetch(`${API}/feed/${itemType}/${itemId}/comments`);
             if (response.ok) {
@@ -420,51 +417,6 @@ function FeedPage() {
             }
         } catch (error) {
             console.error(error);
-        } finally {
-            setCommentsLoading((prev) => {
-                const next = new Set(prev);
-                next.delete(key);
-                return next;
-            });
-        }
-    }
-
-    async function loadCommentsBatch(items: FeedItem[]) {
-        if (items.length === 0) return;
-
-        const keys = items.map((item) => itemKey(item.item_type, item.item_id));
-        setCommentsLoading((prev) => {
-            const next = new Set(prev);
-            keys.forEach((key) => next.add(key));
-            return next;
-        });
-
-        try {
-            // One request for every card on the page instead of one request
-            // per card -- 20 cards used to fire 20 parallel comment fetches.
-            const response = await authFetch(`${API}/feed/comments/batch`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    items: items.map((item) => ({
-                        item_type: item.item_type,
-                        item_id: item.item_id,
-                    })),
-                }),
-            });
-
-            if (response.ok) {
-                const body: Record<string, Comment[]> = await response.json();
-                setComments((prev) => ({ ...prev, ...body }));
-            }
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setCommentsLoading((prev) => {
-                const next = new Set(prev);
-                keys.forEach((key) => next.delete(key));
-                return next;
-            });
         }
     }
 
@@ -474,14 +426,18 @@ function FeedPage() {
         if (!reset) setLoadingMore(true);
 
         try {
+            // /feed returns each item's comments inline (comments keyed by
+            // "type:id") instead of the frontend needing a second request
+            // right after this one lands -- that used to add a full extra
+            // network round trip to every Feed page load.
             const offset = reset ? 0 : feed.length;
             const response = await authFetch(`${API}/feed?limit=${PAGE_SIZE}&offset=${offset}`);
 
             if (response.ok) {
-                const items: FeedItem[] = await response.json();
-                setFeed((prev) => (reset ? items : [...prev, ...items]));
-                loadCommentsBatch(items);
-                setHasMore(items.length === PAGE_SIZE);
+                const body: { items: FeedItem[]; comments: Record<string, Comment[]> } = await response.json();
+                setFeed((prev) => (reset ? body.items : [...prev, ...body.items]));
+                setComments((prev) => ({ ...prev, ...body.comments }));
+                setHasMore(body.items.length === PAGE_SIZE);
             }
         } catch (error) {
             console.error(error);
@@ -1162,10 +1118,7 @@ function FeedPage() {
 
                                 <div className="feed-card-footer">
                                     <div className="feed-comments">
-                                        {commentsLoading.has(key) && itemComments.length === 0 ? (
-                                            <span className="course-count">Loading comments...</span>
-                                        ) : (
-                                            itemComments.map((comment) => (
+                                        {itemComments.map((comment) => (
                                                 <div className="feed-comment-row" key={comment.id}>
                                                     <div className="feed-avatar feed-avatar-small">
                                                         {initials(comment.author_name)}
@@ -1194,8 +1147,7 @@ function FeedPage() {
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ))
-                                        )}
+                                            ))}
                                     </div>
 
                                     <CommentComposer

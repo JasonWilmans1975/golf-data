@@ -845,9 +845,25 @@ def list_comments_batch(user_id: str, items: list[tuple[str, int]]) -> dict[str,
     if not allowed:
         return grouped
 
-    allowed_types = list({item_type for item_type, _ in allowed})
-    allowed_ids = list({item_id for _, item_id in allowed})
-    valid_pairs = set(allowed)
+    return _fetch_comments_for_pairs(user_id, allowed, grouped)
+
+
+def _fetch_comments_for_pairs(
+    user_id: str, pairs: list[tuple[str, int]], grouped: dict[str, list[dict]] | None = None
+) -> dict[str, list[dict]]:
+    """Shared core of list_comments_batch, split out so /feed can fetch
+    comments for the items it just built in the same request instead of the
+    frontend needing a second round trip right after the first one lands.
+    `pairs` must already be permission-checked by the caller."""
+    if grouped is None:
+        grouped = {f"{item_type}:{item_id}": [] for item_type, item_id in pairs}
+
+    if not pairs:
+        return grouped
+
+    allowed_types = list({item_type for item_type, _ in pairs})
+    allowed_ids = list({item_id for _, item_id in pairs})
+    valid_pairs = set(pairs)
 
     response = (
         supabase
@@ -891,6 +907,19 @@ def list_comments_batch(user_id: str, items: list[tuple[str, int]]) -> dict[str,
         })
 
     return grouped
+
+
+def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int = 0) -> dict:
+    """/feed's actual response: the feed items plus every item's comments in
+    one round trip, instead of the frontend waiting for /feed to land and
+    then firing a second request to /feed/comments/batch."""
+    items = get_activity_feed(user_id, limit=limit, offset=offset)
+    pairs = [(item["item_type"], item["item_id"]) for item in items]
+
+    return {
+        "items": items,
+        "comments": _fetch_comments_for_pairs(user_id, pairs),
+    }
 
 
 def add_comment(user_id: str, item_type: str, item_id: int, body: str) -> dict:
