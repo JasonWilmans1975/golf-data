@@ -15,6 +15,7 @@ import HandicapPage from "./HandicapPage";
 import WellnessPage from "./WellnessPage";
 import TeesheetPage from "./TeesheetPage";
 import FriendsPage from "./FriendsPage";
+import LeaderboardPage from "./LeaderboardPage";
 import FeedPage from "./FeedPage";
 import FeedNavButton from "./FeedNavButton";
 import NavButton from "./NavButton";
@@ -283,6 +284,7 @@ function Dashboard() {
                     <NavButton to="/map">World Map</NavButton>
                     <NavButton to="/stats">Stats</NavButton>
                     <NavButton to="/handicap">Handicap</NavButton>
+                    <NavButton to="/leaderboard">Leaderboard</NavButton>
                     <NavButton to="/wellness">Wellness</NavButton>
                     <NavButton to="/teesheet">Teesheet</NavButton>
                     <FeedNavButton />
@@ -1094,6 +1096,15 @@ function AppRoutes() {
                 element={
                     <RequireAuth>
                         <FriendsPage />
+                    </RequireAuth>
+                }
+            />
+
+            <Route
+                path="/leaderboard"
+                element={
+                    <RequireAuth>
+                        <LeaderboardPage />
                     </RequireAuth>
                 }
             />

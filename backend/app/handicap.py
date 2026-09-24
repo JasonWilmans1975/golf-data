@@ -8,6 +8,7 @@ from .db import supabase
 from .courses import match_handicap_scores_to_courses
 from .crypto import encrypt, decrypt
 from .milestones import check_and_award_milestones
+from .leaderboard import maybe_post_daily_leaderboard
 
 HANDICAP_SITE_BASE_URL = "https://www.handicaps.co.za"
 
@@ -247,6 +248,8 @@ async def sync_handicap_data(user_id: str, force: bool = False):
 
     if rows:
         check_and_award_milestones(user_id)
+
+    maybe_post_daily_leaderboard(user_id)
 
     return {
         "skipped": False,

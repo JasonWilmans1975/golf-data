@@ -52,6 +52,7 @@ from .friends import (
     acknowledge_notifications,
     list_notifications,
 )
+from .leaderboard import get_monthly_leaderboard
 
 COURSE_PHOTOS_BUCKET = "course-photos"
 POST_PHOTOS_BUCKET = "post-photos"
@@ -574,6 +575,11 @@ def friends_feed(limit: int = 30, user_id: str = Depends(get_current_user_id)):
 @app.get("/friends")
 def friends_list(user_id: str = Depends(get_current_user_id)):
     return list_friends(user_id)
+
+
+@app.get("/leaderboard")
+def leaderboard(month: str | None = None, user_id: str = Depends(get_current_user_id)):
+    return get_monthly_leaderboard(user_id, month=month)
 
 
 @app.delete("/friends/{friend_user_id}")
