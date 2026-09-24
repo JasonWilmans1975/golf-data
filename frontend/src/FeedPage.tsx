@@ -516,19 +516,6 @@ function FeedPage() {
             return;
         }
 
-        Promise.all([loadFeed(true), loadFriends()]).finally(() => setLoading(false));
-        // Opening the Feed page counts as having seen what's new -- clears
-        // the unread badge on the nav link.
-        authFetch(`${API}/notifications/ack`, { method: "POST" }).catch(() => {});
-
-        authFetch(`${API}/profile`)
-            .then((response) => (response.ok ? response.json() : null))
-            .then((body) => {
-                if (body?.display_name) setMyName(body.display_name);
-                setMyAvatarUrl(body?.avatar_url || null);
-            })
-            .catch(() => {});
-
         async function redirectFirstTimeUsers() {
             try {
                 const [stravaRes, handicapRes, garminRes, teesheetRes] = await Promise.all([
@@ -556,8 +543,6 @@ function FeedPage() {
             }
         }
 
-        redirectFirstTimeUsers();
-
         async function syncHandicapThenRefresh() {
             // Same "show what's already there, sync in the background" pattern
             // as HandicapPage -- the Feed shouldn't block on a handicaps.co.za
@@ -579,7 +564,30 @@ function FeedPage() {
             }
         }
 
-        syncHandicapThenRefresh();
+        // /feed and /friends are the only things that actually block what
+        // the user sees, so they're the only requests fired immediately.
+        // Everything else below -- especially the handicap sync, which can
+        // launch a full headless browser server-side -- used to fire in the
+        // same instant and was competing with /feed itself for the
+        // backend's CPU on every single page open. Deferring it until after
+        // the feed has actually rendered keeps that contention off the
+        // critical path.
+        Promise.all([loadFeed(true), loadFriends()]).finally(() => {
+            setLoading(false);
+
+            authFetch(`${API}/notifications/ack`, { method: "POST" }).catch(() => {});
+
+            authFetch(`${API}/profile`)
+                .then((response) => (response.ok ? response.json() : null))
+                .then((body) => {
+                    if (body?.display_name) setMyName(body.display_name);
+                    setMyAvatarUrl(body?.avatar_url || null);
+                })
+                .catch(() => {});
+
+            redirectFirstTimeUsers();
+            syncHandicapThenRefresh();
+        });
     }, []);
 
     useEffect(() => {
