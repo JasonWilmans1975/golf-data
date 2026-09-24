@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from .db import supabase, fetch_all
-from .friends import list_friend_ids, _display_name, create_post
+from .friends import list_friend_ids, _display_name, _avatar_url, create_post
 
 
 def _profiles_for(user_ids: list[str]) -> dict[str, dict]:
@@ -11,7 +11,7 @@ def _profiles_for(user_ids: list[str]) -> dict[str, dict]:
     response = (
         supabase
         .table("profiles")
-        .select("user_id,display_name,email,surname,nickname,display_preference")
+        .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
         .in_("user_id", user_ids)
         .execute()
     )
@@ -194,6 +194,7 @@ def get_tournament_leaderboard(user_id: str, tournament_id: int) -> dict:
         {
             "user_id": uid,
             "player_name": _display_name(profile_by_user.get(uid)),
+            "avatar_url": _avatar_url(profile_by_user.get(uid)),
             **stats_by_user.get(uid, {"rounds_played": 0, "total_stableford": 0, "total_gross": 0}),
         }
         for uid in accepted_ids
@@ -210,6 +211,7 @@ def get_tournament_leaderboard(user_id: str, tournament_id: int) -> dict:
         {
             "user_id": row["user_id"],
             "player_name": _display_name(profile_by_user.get(row["user_id"])),
+            "avatar_url": _avatar_url(profile_by_user.get(row["user_id"])),
             "status": row["status"],
         }
         for row in participants

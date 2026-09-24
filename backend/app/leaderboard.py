@@ -36,7 +36,7 @@ def _circle_profiles(circle_ids: list[str]) -> dict[str, dict]:
     response = (
         supabase
         .table("profiles")
-        .select("user_id,display_name,email,surname,nickname,display_preference")
+        .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
         .in_("user_id", circle_ids)
         .execute()
     )

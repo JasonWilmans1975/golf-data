@@ -39,6 +39,7 @@ from .friends import (
     cancel_sent_request,
     respond_to_request,
     list_friends,
+    get_friend_profile,
     remove_friend,
     get_friends_feed,
     get_activity_feed_with_comments,
@@ -590,6 +591,14 @@ def friends_feed(limit: int = 30, user_id: str = Depends(get_current_user_id)):
 @app.get("/friends")
 def friends_list(user_id: str = Depends(get_current_user_id)):
     return list_friends(user_id)
+
+
+@app.get("/friends/{friend_user_id}/profile")
+def friend_profile(friend_user_id: str, user_id: str = Depends(get_current_user_id)):
+    try:
+        return get_friend_profile(user_id, friend_user_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
 
 
 @app.get("/leaderboard")

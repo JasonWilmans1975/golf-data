@@ -7,6 +7,8 @@ import BottomNav from "./BottomNav";
 import NavButton from "./NavButton";
 import FeedNavButton from "./FeedNavButton";
 import { supabase } from "./supabaseClient";
+import { useAuth } from "./AuthContext";
+import { Avatar, FriendProfileModal } from "./FriendProfileModal";
 
 type ReactionSummary = {
     counts: Record<string, number>;
@@ -17,7 +19,9 @@ type ReactionSummary = {
 type SharedItem = {
     item_type: "round" | "post";
     item_id: number;
+    user_id: string;
     player_name: string;
+    player_avatar_url: string | null;
     posted_at: string;
     body: string | null;
     photo_url: string | null;
@@ -33,6 +37,7 @@ type FeedItem = {
     item_id: number;
     user_id: string;
     player_name: string;
+    player_avatar_url: string | null;
     posted_at: string;
     body: string | null;
     photo_url: string | null;
@@ -52,6 +57,7 @@ type Comment = {
     id: number;
     user_id: string;
     author_name: string;
+    author_avatar_url: string | null;
     body: string;
     created_at: string;
     reactions: ReactionSummary;
@@ -60,6 +66,7 @@ type Comment = {
 type Friend = {
     user_id: string;
     display_name: string;
+    avatar_url: string | null;
 };
 
 const EMOJIS = [
@@ -99,10 +106,6 @@ function formatDateTime(value: string) {
         hour: "2-digit",
         minute: "2-digit",
     }).format(new Date(value));
-}
-
-function initials(name: string) {
-    return name.trim().charAt(0).toUpperCase() || "?";
 }
 
 function Icon({ children }: { children: ReactNode }) {
@@ -170,16 +173,32 @@ function ShareIcon() {
     );
 }
 
-function renderBody(body: string) {
-    return body.split(/(@[a-zA-Z0-9._-]+)/g).map((part, index) =>
-        part.startsWith("@") ? (
-            <span className="mention" key={index}>
+function renderBody(body: string, friends: Friend[], onMentionClick: (userId: string) => void) {
+    return body.split(/(@[a-zA-Z0-9._-]+)/g).map((part, index) => {
+        if (!part.startsWith("@")) {
+            return <span key={index}>{part}</span>;
+        }
+
+        const friend = friends.find((f) => f.display_name === part.slice(1));
+
+        if (!friend) {
+            return (
+                <span className="mention" key={index}>
+                    {part}
+                </span>
+            );
+        }
+
+        return (
+            <span
+                className="mention mention-clickable"
+                key={index}
+                onClick={() => onMentionClick(friend.user_id)}
+            >
                 {part}
             </span>
-        ) : (
-            <span key={index}>{part}</span>
-        )
-    );
+        );
+    });
 }
 
 function shareText(item: FeedItem | SharedItem) {
@@ -378,10 +397,15 @@ function CommentComposer({
 function FeedPage() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const { session } = useAuth();
+    const myUserId = session?.user?.id;
 
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [friends, setFriends] = useState<Friend[]>([]);
     const [myName, setMyName] = useState("");
+    const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
+    const [openProfileUserId, setOpenProfileUserId] = useState<string | null>(null);
+    const [newPostsAvailable, setNewPostsAvailable] = useState(false);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
@@ -439,6 +463,7 @@ function FeedPage() {
                 setFeed((prev) => (reset ? body.items : [...prev, ...body.items]));
                 setComments((prev) => ({ ...prev, ...body.comments }));
                 setHasMore(body.items.length === PAGE_SIZE);
+                if (reset) setNewPostsAvailable(false);
             }
         } catch (error) {
             console.error(error);
@@ -473,6 +498,7 @@ function FeedPage() {
             .then((response) => (response.ok ? response.json() : null))
             .then((body) => {
                 if (body?.display_name) setMyName(body.display_name);
+                setMyAvatarUrl(body?.avatar_url || null);
             })
             .catch(() => {});
 
@@ -601,6 +627,30 @@ function FeedPage() {
             supabase.removeChannel(channel);
         };
     }, []);
+
+    useEffect(() => {
+        // Facebook-style "new posts" banner instead of silently reordering
+        // the feed under someone mid-scroll -- a friend's new post (or an
+        // auto-post like a milestone/tournament) just flips a flag, and the
+        // viewer chooses when to actually pull it in.
+        const channel = supabase
+            .channel("feed-page-new-posts")
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "posts" },
+                (payload) => {
+                    const row = payload.new as { user_id?: string } | null;
+                    if (row?.user_id && row.user_id !== myUserId) {
+                        setNewPostsAvailable(true);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [myUserId]);
 
     function handleDraftChange(key: string, value: string) {
         setDrafts((prev) => ({ ...prev, [key]: value }));
@@ -874,7 +924,7 @@ function FeedPage() {
                     )}
 
                     <form className="feed-comment-form" onSubmit={handleSubmitPost}>
-                        <div className="feed-avatar feed-avatar-small">{initials(myName || "?")}</div>
+                        <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
 
                         <div className="feed-comment-input-wrap">
                             <input
@@ -946,6 +996,12 @@ function FeedPage() {
                     </form>
                 </div>
 
+                {newPostsAvailable && (
+                    <button className="feed-new-posts-banner" onClick={() => loadFeed(true)}>
+                        New posts — tap to refresh
+                    </button>
+                )}
+
                 {loading ? (
                     <div className="loading-card">Loading feed...</div>
                 ) : feed.length === 0 ? (
@@ -966,7 +1022,11 @@ function FeedPage() {
                                 }}
                             >
                                 <div className="feed-card-header">
-                                    <div className="feed-avatar">{initials(item.player_name)}</div>
+                                    <Avatar
+                                        name={item.player_name}
+                                        avatarUrl={item.player_avatar_url}
+                                        onClick={() => setOpenProfileUserId(item.user_id)}
+                                    />
 
                                     <div>
                                         <strong>{item.player_name}</strong>
@@ -974,7 +1034,11 @@ function FeedPage() {
                                     </div>
                                 </div>
 
-                                {item.body && <p className="feed-post-body">{renderBody(item.body)}</p>}
+                                {item.body && (
+                                    <p className="feed-post-body">
+                                        {renderBody(item.body, friends, setOpenProfileUserId)}
+                                    </p>
+                                )}
 
                                 {item.photo_url && (
                                     <img src={item.photo_url} alt="" className="feed-card-photo" />
@@ -983,9 +1047,11 @@ function FeedPage() {
                                 {item.shared_item && (
                                     <div className="feed-shared-item">
                                         <div className="feed-card-header">
-                                            <div className="feed-avatar">
-                                                {initials(item.shared_item.player_name)}
-                                            </div>
+                                            <Avatar
+                                                name={item.shared_item.player_name}
+                                                avatarUrl={item.shared_item.player_avatar_url}
+                                                onClick={() => setOpenProfileUserId(item.shared_item!.user_id)}
+                                            />
                                             <div>
                                                 <strong>{item.shared_item.player_name}</strong>
                                                 <span>{formatDate(item.shared_item.posted_at)}</span>
@@ -993,7 +1059,9 @@ function FeedPage() {
                                         </div>
 
                                         {item.shared_item.body && (
-                                            <p className="feed-post-body">{renderBody(item.shared_item.body)}</p>
+                                            <p className="feed-post-body">
+                                                {renderBody(item.shared_item.body, friends, setOpenProfileUserId)}
+                                            </p>
                                         )}
 
                                         {item.shared_item.photo_url && (
@@ -1151,14 +1219,17 @@ function FeedPage() {
                                     <div className="feed-comments">
                                         {itemComments.map((comment) => (
                                                 <div className="feed-comment-row" key={comment.id}>
-                                                    <div className="feed-avatar feed-avatar-small">
-                                                        {initials(comment.author_name)}
-                                                    </div>
+                                                    <Avatar
+                                                        name={comment.author_name}
+                                                        avatarUrl={comment.author_avatar_url}
+                                                        small
+                                                        onClick={() => setOpenProfileUserId(comment.user_id)}
+                                                    />
 
                                                     <div className="feed-comment-bubble-wrap">
                                                         <div className="feed-comment-bubble">
                                                             <strong>{comment.author_name}</strong>
-                                                            <p>{renderBody(comment.body)}</p>
+                                                            <p>{renderBody(comment.body, friends, setOpenProfileUserId)}</p>
                                                         </div>
 
                                                         <div className="feed-comment-meta">
@@ -1212,6 +1283,10 @@ function FeedPage() {
             </main>
 
             <BottomNav />
+
+            {openProfileUserId && (
+                <FriendProfileModal userId={openProfileUserId} onClose={() => setOpenProfileUserId(null)} />
+            )}
         </div>
     );
 }

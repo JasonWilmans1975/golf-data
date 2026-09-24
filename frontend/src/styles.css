@@ -962,6 +962,62 @@ button {
     flex-shrink: 0;
 }
 
+.feed-avatar-clickable {
+    cursor: pointer;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 20px;
+}
+
+.modal-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    position: relative;
+    max-width: 320px;
+    width: 100%;
+}
+
+.modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px;
+}
+
+.friend-profile-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 4px;
+}
+
+.friend-profile-card .feed-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+.friend-profile-card h3 {
+    margin: 0;
+}
+
 .feed-avatar-small {
     width: 32px;
     height: 32px;
@@ -1205,6 +1261,32 @@ button {
 .mention {
     color: var(--accent);
     font-weight: 700;
+}
+
+.mention-clickable {
+    cursor: pointer;
+}
+
+.feed-new-posts-banner {
+    display: block;
+    width: 100%;
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 12px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.feed-new-posts-banner:hover {
+    background: var(--accent-bright);
+}
+
+.mention-clickable:hover {
+    text-decoration: underline;
 }
 
 .feed-comment-emoji-wrap {

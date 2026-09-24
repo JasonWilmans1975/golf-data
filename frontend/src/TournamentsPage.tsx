@@ -4,10 +4,12 @@ import TopbarActions from "./TopbarActions";
 import BrandLogo from "./BrandLogo";
 import NavButton from "./NavButton";
 import FeedNavButton from "./FeedNavButton";
+import { Avatar, FriendProfileModal } from "./FriendProfileModal";
 
 type Friend = {
     user_id: string;
     display_name: string;
+    avatar_url: string | null;
 };
 
 type Tournament = {
@@ -23,6 +25,7 @@ type Tournament = {
 type LeaderboardEntry = {
     user_id: string;
     player_name: string;
+    avatar_url: string | null;
     rounds_played: number;
     total_stableford: number;
     total_gross: number;
@@ -31,6 +34,7 @@ type LeaderboardEntry = {
 type PendingEntry = {
     user_id: string;
     player_name: string;
+    avatar_url: string | null;
     status: "invited" | "declined";
 };
 
@@ -57,6 +61,7 @@ function TournamentsPage() {
 
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [detail, setDetail] = useState<TournamentDetail | null>(null);
+    const [openProfileUserId, setOpenProfileUserId] = useState<string | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
 
     const [showCreate, setShowCreate] = useState(false);
@@ -362,11 +367,19 @@ function TournamentsPage() {
                                         <div className="round-list">
                                             {detail.leaderboard.map((entry, index) => (
                                                 <div className="round-row" key={entry.user_id}>
-                                                    <div>
-                                                        <strong>
-                                                            {index + 1}. {entry.player_name}
-                                                        </strong>
-                                                        <span>{entry.rounds_played} round{entry.rounds_played === 1 ? "" : "s"}</span>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                                        <Avatar
+                                                            name={entry.player_name}
+                                                            avatarUrl={entry.avatar_url}
+                                                            small
+                                                            onClick={() => setOpenProfileUserId(entry.user_id)}
+                                                        />
+                                                        <div>
+                                                            <strong>
+                                                                {index + 1}. {entry.player_name}
+                                                            </strong>
+                                                            <span>{entry.rounds_played} round{entry.rounds_played === 1 ? "" : "s"}</span>
+                                                        </div>
                                                     </div>
 
                                                     <div>
@@ -384,9 +397,28 @@ function TournamentsPage() {
                                     )}
 
                                     {detail.pending.length > 0 && (
-                                        <p className="course-count" style={{ marginTop: 12 }}>
-                                            Waiting on: {detail.pending.map((p) => p.player_name).join(", ")}
-                                        </p>
+                                        <div style={{ marginTop: 12 }}>
+                                            <p className="course-count" style={{ marginBottom: 8 }}>
+                                                Waiting on:
+                                            </p>
+                                            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                                                {detail.pending.map((p) => (
+                                                    <div
+                                                        key={p.user_id}
+                                                        style={{
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            gap: 6,
+                                                            cursor: "pointer",
+                                                        }}
+                                                        onClick={() => setOpenProfileUserId(p.user_id)}
+                                                    >
+                                                        <Avatar name={p.player_name} avatarUrl={p.avatar_url} small />
+                                                        <span className="course-count">{p.player_name}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
                                     )}
                                 </>
                             )}
@@ -394,6 +426,10 @@ function TournamentsPage() {
                     )}
                 </section>
             </main>
+
+            {openProfileUserId && (
+                <FriendProfileModal userId={openProfileUserId} onClose={() => setOpenProfileUserId(null)} />
+            )}
         </>
     );
 }
