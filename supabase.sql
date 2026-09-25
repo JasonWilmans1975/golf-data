@@ -551,3 +551,10 @@ alter table if exists public.tournaments add column if not exists results_posted
 -- automatically the moment a login succeeds again (re-saving credentials,
 -- or even a transient rejection clearing up on its own).
 alter table if exists public.handicap_credentials add column if not exists invalid_since timestamptz;
+
+-- handicaps.co.za's own API exposes IsNineHole, which we weren't capturing --
+-- without it, a legitimately-counting 9-hole round's naturally-lower gross
+-- score could be compared directly against 18-hole rounds for "personal
+-- best" purposes, which doesn't make sense (found from a real case: a
+-- 9-hole 45 gross / 20 Stableford round outscoring real 18-hole rounds).
+alter table if exists public.handicap_scores add column if not exists is_nine_hole boolean not null default false;

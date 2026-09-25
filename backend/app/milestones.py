@@ -43,7 +43,7 @@ def check_and_award_milestones(user_id: str) -> None:
     scores = fetch_all(
         lambda: supabase
         .table("handicap_scores")
-        .select("adjusted_gross,stableford_points,handicap_index")
+        .select("adjusted_gross,stableford_points,handicap_index,counted_in_handicap,is_nine_hole")
         .eq("user_id", user_id)
         .order("id")
     )
@@ -54,12 +54,20 @@ def check_and_award_milestones(user_id: str) -> None:
         if round_count >= threshold:
             _award(user_id, f"rounds_{threshold}", f"just played their {threshold}th round of golf!")
 
-    grosses = [s["adjusted_gross"] for s in scores if s.get("adjusted_gross") is not None]
+    # "Personal best" only makes sense against full 18-hole rounds that
+    # actually count towards your handicap -- a casual round, a short par-3
+    # course (counted_in_handicap=false), or a 9-hole round (naturally a
+    # much lower gross/Stableford number than 18 holes) all produce figures
+    # that aren't comparable to a real round, which showed up as nonsense
+    # "personal best" posts before these filters existed.
+    counting_scores = [s for s in scores if s.get("counted_in_handicap") and not s.get("is_nine_hole")]
+
+    grosses = [s["adjusted_gross"] for s in counting_scores if s.get("adjusted_gross") is not None]
     if grosses:
         best_gross = min(grosses)
         _award(user_id, f"best_gross_{best_gross}", f"shot a new personal best round: {best_gross}!")
 
-    stablefords = [s["stableford_points"] for s in scores if s.get("stableford_points") is not None]
+    stablefords = [s["stableford_points"] for s in counting_scores if s.get("stableford_points") is not None]
     if stablefords:
         best_stableford = max(stablefords)
         _award(
@@ -68,7 +76,7 @@ def check_and_award_milestones(user_id: str) -> None:
             f"scored a new personal best of {best_stableford} Stableford points!",
         )
 
-    handicaps = [s["handicap_index"] for s in scores if s.get("handicap_index") is not None]
+    handicaps = [s["handicap_index"] for s in counting_scores if s.get("handicap_index") is not None]
     if handicaps:
         best_handicap = round(min(handicaps), 1)
         _award(user_id, f"best_handicap_{best_handicap}", f"reached a new personal-best handicap of {best_handicap}!")

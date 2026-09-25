@@ -297,6 +297,7 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
             "stableford_points": score.get("StablefordPoints"),
             "counted_in_handicap": bool(score.get("CountedInHandicap")),
             "is_casual_score": bool(score.get("IsCasualScore")),
+            "is_nine_hole": bool(score.get("IsNineHole")),
         })
 
     if rows:
