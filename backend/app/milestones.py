@@ -21,7 +21,7 @@ def _already_earned(user_id: str, badge_key: str) -> bool:
     return bool(response.data)
 
 
-def _award(user_id: str, badge_key: str, message: str) -> None:
+def _award(user_id: str, badge_key: str, message: str, silent: bool = False) -> None:
     if _already_earned(user_id, badge_key):
         return
 
@@ -32,10 +32,16 @@ def _award(user_id: str, badge_key: str, message: str) -> None:
         # nothing to do.
         return
 
-    create_post(user_id, f"🏆 {message}")
+    # silent still records the badge as earned (so crossing the *next*
+    # threshold from genuinely new rounds announces normally), it just
+    # doesn't post -- used for a first-ever sync, where every threshold a
+    # long handicap history already qualifies for isn't something that just
+    # happened today.
+    if not silent:
+        create_post(user_id, f"🏆 {message}")
 
 
-def check_and_award_milestones(user_id: str) -> None:
+def check_and_award_milestones(user_id: str, silent: bool = False) -> None:
     """Called after a handicap sync brings in new data. Cheap to re-run --
     _award() no-ops instantly for anything already earned, and thresholds
     only ever fire once each thanks to the unique (user_id, badge_key)
@@ -52,7 +58,7 @@ def check_and_award_milestones(user_id: str) -> None:
 
     for threshold in ROUND_THRESHOLDS:
         if round_count >= threshold:
-            _award(user_id, f"rounds_{threshold}", f"just played their {threshold}th round of golf!")
+            _award(user_id, f"rounds_{threshold}", f"just played their {threshold}th round of golf!", silent=silent)
 
     # "Personal best" only makes sense against full 18-hole rounds that
     # actually count towards your handicap -- a casual round, a short par-3
@@ -65,7 +71,7 @@ def check_and_award_milestones(user_id: str) -> None:
     grosses = [s["adjusted_gross"] for s in counting_scores if s.get("adjusted_gross") is not None]
     if grosses:
         best_gross = min(grosses)
-        _award(user_id, f"best_gross_{best_gross}", f"shot a new personal best round: {best_gross}!")
+        _award(user_id, f"best_gross_{best_gross}", f"shot a new personal best round: {best_gross}!", silent=silent)
 
     stablefords = [s["stableford_points"] for s in counting_scores if s.get("stableford_points") is not None]
     if stablefords:
@@ -74,12 +80,18 @@ def check_and_award_milestones(user_id: str) -> None:
             user_id,
             f"best_stableford_{best_stableford}",
             f"scored a new personal best of {best_stableford} Stableford points!",
+            silent=silent,
         )
 
     handicaps = [s["handicap_index"] for s in counting_scores if s.get("handicap_index") is not None]
     if handicaps:
         best_handicap = round(min(handicaps), 1)
-        _award(user_id, f"best_handicap_{best_handicap}", f"reached a new personal-best handicap of {best_handicap}!")
+        _award(
+            user_id,
+            f"best_handicap_{best_handicap}",
+            f"reached a new personal-best handicap of {best_handicap}!",
+            silent=silent,
+        )
 
     course_count = len(get_courses_for_user(user_id))
 
@@ -89,6 +101,7 @@ def check_and_award_milestones(user_id: str) -> None:
                 user_id,
                 f"courses_{threshold}",
                 f"has now played {threshold} different golf courses!",
+                silent=silent,
             )
 
     country_count = len(get_countries_played(user_id))
@@ -99,4 +112,5 @@ def check_and_award_milestones(user_id: str) -> None:
                 user_id,
                 f"countries_{threshold}",
                 f"has now played golf in {threshold} different countries!",
+                silent=silent,
             )

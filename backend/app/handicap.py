@@ -249,10 +249,35 @@ def _mark_synced_now(user_id: str, current_index):
     }).execute()
 
 
+def _is_first_ever_sync(user_id: str) -> bool:
+    response = supabase.table("handicap_sync_state").select("user_id").eq("user_id", user_id).limit(1).execute()
+    return not response.data
+
+
+def _hide_old_rounds_from_feed(user_id: str) -> None:
+    """Runs once, right after someone's very first sync. All their history
+    stays in handicap_scores for stats/handicap/leaderboard purposes -- this
+    only keeps the Feed itself from suddenly showing years of someone's past
+    rounds (plus, separately, a burst of milestone posts) the moment they
+    connect, which is what actually made a new signup look messy."""
+    scores = fetch_all(
+        lambda: supabase
+        .table("handicap_scores")
+        .select("score_id")
+        .eq("user_id", user_id)
+        .order("play_date", desc=True)
+    )
+    to_hide = [row["score_id"] for row in scores[2:]]
+
+    if to_hide:
+        supabase.table("handicap_scores").update({"hidden_from_feed": True}).in_("score_id", to_hide).execute()
+
+
 async def sync_handicap_data(user_id: str, force: bool = False, full_resync: bool = False):
     if not force and _already_synced_today(user_id):
         return {"skipped": True, "reason": "Already synced today"}
 
+    is_first_sync = _is_first_ever_sync(user_id)
     member_no, password = _get_credentials(user_id)
     # Historic rounds don't change once played, so a normal sync only pages
     # through scores until it catches up to what's already stored -- force
@@ -308,7 +333,15 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
     _mark_synced_now(user_id, data["current_index"])
 
     if rows:
-        check_and_award_milestones(user_id)
+        if is_first_sync:
+            _hide_old_rounds_from_feed(user_id)
+            # Still records what they've already earned (so crossing the
+            # *next* threshold from new rounds announces normally instead of
+            # re-firing everything), just without posting for a history
+            # they didn't just achieve today.
+            check_and_award_milestones(user_id, silent=True)
+        else:
+            check_and_award_milestones(user_id)
 
     maybe_post_daily_leaderboard(user_id)
     maybe_post_tournament_results(user_id)

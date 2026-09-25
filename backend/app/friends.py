@@ -595,6 +595,7 @@ def _build_rounds_feed(viewer_id: str, user_ids: list[str], limit: int) -> list[
             "course_id,course_name,country_name,country_flag_url"
         )
         .in_("user_id", user_ids)
+        .eq("hidden_from_feed", False)
         .order("play_date", desc=True)
         .limit(limit)
         .execute()
@@ -923,6 +924,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "course_id,course_name,country_name,country_flag_url"
             )
             .in_("user_id", circle_ids)
+            .eq("hidden_from_feed", False)
             .order("play_date", desc=True)
             .limit(fetch_count)
             .execute()

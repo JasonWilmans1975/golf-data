@@ -558,3 +558,10 @@ alter table if exists public.handicap_credentials add column if not exists inval
 -- best" purposes, which doesn't make sense (found from a real case: a
 -- 9-hole 45 gross / 20 Stableford round outscoring real 18-hole rounds).
 alter table if exists public.handicap_scores add column if not exists is_nine_hole boolean not null default false;
+
+-- Set on every round except the 2 most recent, once, right after someone's
+-- very first sync -- their full history still counts for stats/handicap/
+-- leaderboards, it just doesn't all show up as individual Feed cards the
+-- moment they connect (same reasoning as the milestones silent flag: a
+-- historical backfill isn't something that "just happened").
+alter table if exists public.handicap_scores add column if not exists hidden_from_feed boolean not null default false;
