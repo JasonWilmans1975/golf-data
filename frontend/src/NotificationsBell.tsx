@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 
 type Notification = {
     id: string;
-    type: "like" | "mention";
+    type: "like" | "mention" | "friend_request";
     actor_name: string;
     reaction: string | null;
-    target_item_type: string;
-    target_item_id: number;
+    target_item_type: string | null;
+    target_item_id: number | null;
+    request_id: number | null;
     created_at: string;
     read: boolean;
 };
@@ -38,6 +39,10 @@ function formatRelative(value: string) {
 }
 
 function notificationText(n: Notification) {
+    if (n.type === "friend_request") {
+        return `${n.actor_name} sent you a friend request`;
+    }
+
     const noun = n.target_item_type === "round" ? "round" : "post";
 
     if (n.type === "like") {
@@ -56,24 +61,21 @@ function NotificationsBell() {
 
     const unreadCount = notifications.filter((n) => !n.read).length;
 
+    function refetch() {
+        return authFetch(`${API}/notifications`)
+            .then((response) => (response.ok ? response.json() : null))
+            .then((body) => {
+                if (body) setNotifications(body);
+            })
+            .catch(() => {})
+            .finally(() => setLoaded(true));
+    }
+
     useEffect(() => {
         // Fetch the full list up front instead of waiting until the bell is
         // clicked -- opening it should be instant, not trigger a fresh
         // network round trip.
-        let cancelled = false;
         let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-        function refetch() {
-            authFetch(`${API}/notifications`)
-                .then((response) => (response.ok ? response.json() : null))
-                .then((body) => {
-                    if (!cancelled && body) setNotifications(body);
-                })
-                .catch(() => {})
-                .finally(() => {
-                    if (!cancelled) setLoaded(true);
-                });
-        }
 
         function refetchDebounced() {
             // A burst of likes/comments arriving together should collapse
@@ -97,10 +99,14 @@ function NotificationsBell() {
                 { event: "INSERT", schema: "public", table: "feed_comments" },
                 refetchDebounced
             )
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "friend_requests" },
+                refetchDebounced
+            )
             .subscribe();
 
         return () => {
-            cancelled = true;
             if (debounceTimer) clearTimeout(debounceTimer);
             supabase.removeChannel(channel);
         };
@@ -132,8 +138,25 @@ function NotificationsBell() {
     }
 
     function handleSelect(n: Notification) {
+        if (n.type === "friend_request") return;
         setOpen(false);
         navigate(`/feed?highlight=${n.target_item_type}:${n.target_item_id}`);
+    }
+
+    async function handleRespond(requestId: number, accept: boolean, event: ReactMouseEvent) {
+        event.stopPropagation();
+
+        try {
+            const response = await authFetch(`${API}/friends/requests/${requestId}/${accept ? "accept" : "decline"}`, {
+                method: "POST",
+            });
+
+            if (response.ok) {
+                setNotifications((prev) => prev.filter((n) => n.request_id !== requestId));
+            }
+        } catch (error) {
+            console.error(error);
+        }
     }
 
     return (
@@ -172,14 +195,34 @@ function NotificationsBell() {
                         <div className="notifications-empty">Nothing yet.</div>
                     ) : (
                         notifications.map((n) => (
-                            <button
+                            <div
                                 key={n.id}
-                                className={`notification-row${n.read ? "" : " unread"}`}
+                                className={`notification-row${n.read ? "" : " unread"}${
+                                    n.type === "friend_request" ? " notification-row-static" : ""
+                                }`}
                                 onClick={() => handleSelect(n)}
+                                role={n.type === "friend_request" ? undefined : "button"}
                             >
                                 <span className="notification-text">{notificationText(n)}</span>
                                 <span className="notification-time">{formatRelative(n.created_at)}</span>
-                            </button>
+
+                                {n.type === "friend_request" && n.request_id != null && (
+                                    <div className="notification-actions">
+                                        <button
+                                            className="sync-button"
+                                            onClick={(event) => handleRespond(n.request_id!, true, event)}
+                                        >
+                                            Accept
+                                        </button>
+                                        <button
+                                            className="integration-action-button"
+                                            onClick={(event) => handleRespond(n.request_id!, false, event)}
+                                        >
+                                            Decline
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         ))
                     )}
                 </div>

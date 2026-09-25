@@ -1172,8 +1172,36 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
                 "item_type": row["item_type"],
                 "item_id": row["item_id"],
                 "reaction": row["reaction"],
+                "request_id": None,
                 "created_at": row["created_at"],
             })
+
+    # Pending incoming friend requests, actionable right from the panel --
+    # unlike a like/mention these always count as unread until responded to
+    # (accepting/declining, not just opening the panel), since they're
+    # something to act on, not just see.
+    pending_response = (
+        supabase
+        .table("friend_requests")
+        .select("id,from_user_id,created_at")
+        .eq("to_user_id", user_id)
+        .eq("status", "pending")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    for row in pending_response.data or []:
+        raw.append({
+            "id": f"friend_request:{row['id']}",
+            "type": "friend_request",
+            "actor_id": row["from_user_id"],
+            "item_type": None,
+            "item_id": None,
+            "reaction": None,
+            "request_id": row["id"],
+            "created_at": row["created_at"],
+        })
 
     for table, item_type in (("posts", "post"), ("feed_comments", "comment")):
         response = (
@@ -1195,6 +1223,7 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
                 "item_type": item_type,
                 "item_id": row["id"],
                 "reaction": None,
+                "request_id": None,
                 "created_at": row["created_at"],
             })
 
@@ -1242,8 +1271,12 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
             "reaction": row["reaction"],
             "target_item_type": target_type,
             "target_item_id": target_id,
+            "request_id": row["request_id"],
             "created_at": row["created_at"],
-            "read": row["created_at"] <= checked_at,
+            # A friend request stays unread until it's actually responded to,
+            # not just seen -- everything else uses the normal "opened the
+            # panel" definition.
+            "read": False if row["type"] == "friend_request" else row["created_at"] <= checked_at,
         })
 
     notifications.sort(key=lambda n: n["created_at"], reverse=True)

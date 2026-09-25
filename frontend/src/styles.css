@@ -894,6 +894,24 @@ button {
     background: var(--accent-soft);
 }
 
+.notification-row-static {
+    cursor: default;
+    flex-wrap: wrap;
+}
+
+.notification-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.notification-actions .sync-button,
+.notification-actions .integration-action-button {
+    padding: 6px 14px;
+    font-size: 12px;
+}
+
 .notification-text {
     font-size: 13px;
     flex: 1;
