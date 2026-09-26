@@ -51,6 +51,7 @@ type FeedItem = {
     country_flag_url: string | null;
     comment_count: number;
     reactions: ReactionSummary;
+    is_system_generated: boolean;
 };
 
 type Comment = {
@@ -106,6 +107,25 @@ function formatDateTime(value: string) {
         hour: "2-digit",
         minute: "2-digit",
     }).format(new Date(value));
+}
+
+function formatRelative(value: string) {
+    const diffMs = Date.now() - new Date(value).getTime();
+    const minutes = Math.floor(diffMs / 60000);
+
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+
+    const days = Math.floor(hours / 24);
+    // Beyond about a week, "43d" stops being useful (worse for a round
+    // played months or years ago) -- fall back to a real date, same as
+    // Facebook does once a post ages out of the relative window.
+    if (days < 7) return `${days}d`;
+
+    return formatDate(value);
 }
 
 function Icon({ children }: { children: ReactNode }) {
@@ -1059,13 +1079,21 @@ function FeedPage() {
                                 <div className="feed-card-header">
                                     <Avatar
                                         name={item.player_name}
-                                        avatarUrl={item.player_avatar_url}
-                                        onClick={() => setOpenProfileUserId(item.user_id)}
+                                        avatarUrl={
+                                            item.is_system_generated
+                                                ? `${import.meta.env.BASE_URL}favicon.svg`
+                                                : item.player_avatar_url
+                                        }
+                                        onClick={
+                                            item.is_system_generated
+                                                ? undefined
+                                                : () => setOpenProfileUserId(item.user_id)
+                                        }
                                     />
 
                                     <div>
                                         <strong>{item.player_name}</strong>
-                                        <span>{formatDate(item.posted_at)}</span>
+                                        <span>{formatRelative(item.posted_at)}</span>
                                     </div>
                                 </div>
 
@@ -1089,7 +1117,7 @@ function FeedPage() {
                                             />
                                             <div>
                                                 <strong>{item.shared_item.player_name}</strong>
-                                                <span>{formatDate(item.shared_item.posted_at)}</span>
+                                                <span>{formatRelative(item.shared_item.posted_at)}</span>
                                             </div>
                                         </div>
 

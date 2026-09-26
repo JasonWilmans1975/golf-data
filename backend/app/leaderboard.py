@@ -166,4 +166,8 @@ def maybe_post_daily_leaderboard(user_id: str) -> None:
         for i, score in enumerate(ranked)
     ]
 
-    create_post(user_id, "⛳ Yesterday's top scores:\n" + "\n".join(lines))
+    create_post(
+        user_id,
+        "⛳ Yesterday's top scores:\n" + "\n".join(lines),
+        is_system_generated=True,
+    )

@@ -276,7 +276,7 @@ def maybe_post_tournament_results(user_id: str) -> None:
         )
 
         if not ranked:
-            create_post(user_id, f"🏁 {link} has ended — no scores were recorded.")
+            create_post(user_id, f"🏁 {link} has ended — no scores were recorded.", is_system_generated=True)
             continue
 
         profile_by_user = _profiles_for(ranked)
@@ -287,7 +287,7 @@ def maybe_post_tournament_results(user_id: str) -> None:
             for i, uid in enumerate(ranked)
         ]
 
-        create_post(user_id, f"🏁 Final results: {link}\n" + "\n".join(lines))
+        create_post(user_id, f"🏁 Final results: {link}\n" + "\n".join(lines), is_system_generated=True)
 
 
 def get_tournament_leaderboard(user_id: str, tournament_id: int) -> dict:

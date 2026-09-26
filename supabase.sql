@@ -565,3 +565,10 @@ alter table if exists public.handicap_scores add column if not exists is_nine_ho
 -- moment they connect (same reasoning as the milestones silent flag: a
 -- historical backfill isn't something that "just happened").
 alter table if exists public.handicap_scores add column if not exists hidden_from_feed boolean not null default false;
+
+-- posts.user_id still owns the post for visibility/permissions (whose
+-- circle sees it, who can comment) -- this only changes how the Feed
+-- displays it, as "GolfCircle" instead of whoever's sync happened to
+-- trigger an automated summary (the daily leaderboard, tournament results)
+-- where the real author is incidental, not the point of the post.
+alter table if exists public.posts add column if not exists is_system_generated boolean not null default false;

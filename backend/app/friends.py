@@ -24,6 +24,21 @@ def _avatar_url(profile: dict | None) -> str | None:
     return profile.get("avatar_url") if profile else None
 
 
+SYSTEM_POSTER_NAME = "GolfCircle"
+
+
+def _post_identity(post: dict, profile: dict | None) -> tuple[str, str | None]:
+    """post.user_id still owns the post for visibility/permissions -- this
+    only decides what the Feed *displays* as the author. is_system_generated
+    posts (the daily leaderboard, tournament results) name the real players
+    in their own body text already, so whoever's sync happened to trigger
+    the post is incidental and shown as "GolfCircle" instead."""
+    if post.get("is_system_generated"):
+        return SYSTEM_POSTER_NAME, None
+
+    return _display_name(profile), _avatar_url(profile)
+
+
 PROFILE_FIELDS = (
     "user_id,email,display_name,surname,nickname,phone,country,province,"
     "date_of_birth,sex,avatar_url,display_preference,newsletter_opt_in,sponsor_opt_in"
@@ -552,7 +567,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
         response = (
             supabase
             .table("posts")
-            .select("id,user_id,body,photo_url,created_at")
+            .select("id,user_id,body,photo_url,created_at,is_system_generated")
             .eq("id", item_id)
             .limit(1)
             .execute()
@@ -566,13 +581,14 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             supabase.table("profiles").select("display_name,email,surname,nickname,display_preference,avatar_url").eq("user_id", post["user_id"]).limit(1).execute()
         )
         profile = profile_response.data[0] if profile_response.data else None
+        player_name, player_avatar_url = _post_identity(post, profile)
 
         return {
             "item_type": "post",
             "item_id": post["id"],
             "user_id": post["user_id"],
-            "player_name": _display_name(profile),
-            "player_avatar_url": _avatar_url(profile),
+            "player_name": player_name,
+            "player_avatar_url": player_avatar_url,
             "posted_at": post["created_at"],
             "body": post["body"],
             "photo_url": post.get("photo_url"),
@@ -682,7 +698,14 @@ def create_post(
     shared_item_type: str | None = None,
     shared_item_id: int | None = None,
     photo_url: str | None = None,
+    is_system_generated: bool = False,
 ) -> dict:
+    """user_id still owns the post for visibility/permission purposes (whose
+    circle sees it, who can comment) -- is_system_generated only changes how
+    the Feed *displays* it, showing "GolfCircle" instead of whoever's sync
+    happened to trigger an automated post (a milestone, the daily
+    leaderboard, a tournament announcement). See get_activity_feed_with_
+    comments and _snapshot_item for where that display override happens."""
     body = body.strip()
 
     if not body and not photo_url and not (shared_item_type and shared_item_id):
@@ -691,7 +714,7 @@ def create_post(
     if len(body) > 2000:
         raise ValueError("Post is too long")
 
-    row = {"user_id": user_id, "body": body, "photo_url": photo_url}
+    row = {"user_id": user_id, "body": body, "photo_url": photo_url, "is_system_generated": is_system_generated}
 
     if shared_item_type and shared_item_id:
         if shared_item_type not in ("round", "post"):
@@ -935,7 +958,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         response = (
             supabase
             .table("posts")
-            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at")
+            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at,is_system_generated")
             .in_("user_id", circle_ids)
             .order("created_at", desc=True)
             .limit(fetch_count)
@@ -1028,18 +1051,21 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "country_flag_url": raw.get("country_flag_url"),
                 "comment_count": comment_count,
                 "reactions": reactions,
+                "is_system_generated": False,
             })
         else:
             shared_item = None
             if raw.get("shared_item_type") and raw.get("shared_item_id"):
                 shared_item = _snapshot_item(raw["shared_item_type"], raw["shared_item_id"])
 
+            player_name, player_avatar_url = _post_identity(raw, profile_by_user.get(raw["user_id"]))
+
             items.append({
                 "item_type": "post",
                 "item_id": item_id,
                 "user_id": raw["user_id"],
-                "player_name": _display_name(profile_by_user.get(raw["user_id"])),
-                "player_avatar_url": _avatar_url(profile_by_user.get(raw["user_id"])),
+                "player_name": player_name,
+                "player_avatar_url": player_avatar_url,
                 "posted_at": raw["created_at"],
                 "body": raw["body"],
                 "photo_url": raw.get("photo_url"),
@@ -1053,6 +1079,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "country_flag_url": None,
                 "comment_count": comment_count,
                 "reactions": reactions,
+                "is_system_generated": bool(raw.get("is_system_generated")),
             })
 
     return {"items": items, "comments": comments_by_key}
