@@ -75,7 +75,7 @@ logger = logging.getLogger("golfcircle")
 app = FastAPI(title="GolfCircle API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=settings.frontend_urls,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,7 +94,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     origin = request.headers.get("origin")
 
     headers = {}
-    if origin == settings.frontend_url:
+    if origin in settings.frontend_urls:
         headers["Access-Control-Allow-Origin"] = origin
         headers["Access-Control-Allow-Credentials"] = "true"
 

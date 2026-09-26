@@ -14,8 +14,10 @@ backend/app/__pycache__/
 # Node / frontend build
 frontend/node_modules/
 frontend/dist/
+frontend/dist-golfcircle/
 frontend/tsconfig.tsbuildinfo
 frontend/handicap-build.zip
+frontend/golfcircle-build.zip
 
 # Editor / OS
 .idea/

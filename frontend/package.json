@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build"
+    "build": "tsc -b && vite build",
+    "build:golfcircle": "tsc -b && VITE_BASE_PATH=/ VITE_OUT_DIR=dist-golfcircle vite build && node -e \"const fs=require('fs');const p='dist-golfcircle/.htaccess';fs.writeFileSync(p, fs.readFileSync(p,'utf8').replace('RewriteBase /handicap/', 'RewriteBase /'))\""
   },
   "dependencies": {
     "@mapbox/polyline": "^1.2.1",
