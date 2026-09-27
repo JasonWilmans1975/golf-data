@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
+from starlette.concurrency import run_in_threadpool
 
 from .db import supabase
 from .crypto import encrypt, decrypt
@@ -273,6 +274,10 @@ async def sync_teesheet_data(user_id: str, force: bool = False) -> dict:
         finally:
             await browser.close()
 
+    return await run_in_threadpool(_store_teesheet_sync, user_id, bookings, txn_data)
+
+
+def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict) -> dict:
     if bookings:
         supabase.table("teesheet_bookings").upsert(
             [{**b, "user_id": user_id} for b in bookings],

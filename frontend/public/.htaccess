@@ -1,6 +1,14 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /handicap/
+
+  # Plain http:// was serving the site directly with no redirect at all --
+  # browsers correctly flag that as "Not Secure" since it's genuinely
+  # unencrypted, even though the https:// version works fine. Force it here
+  # instead of relying on every visitor typing https:// themselves.
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.html [L]

@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
-import TopbarActions from "./TopbarActions";
+import AppNav from "./AppNav";
 import BrandLogo from "./BrandLogo";
-import NavButton from "./NavButton";
-import FeedNavButton from "./FeedNavButton";
 
 type Booking = {
     id: number;
@@ -129,26 +127,7 @@ function TeesheetPage() {
                     <BrandLogo />
                 </div>
 
-                <TopbarActions>
-                    <NavButton to="/rounds">My Rounds</NavButton>
-                    <NavButton to="/map">World Map</NavButton>
-                    <NavButton to="/handicap">Handicap</NavButton>
-                    <NavButton to="/leaderboard">Leaderboard</NavButton>
-                    <NavButton to="/tournaments">Tournaments</NavButton>
-                    <NavButton to="/friends">Friends</NavButton>
-                    <NavButton to="/wellness">Wellness</NavButton>
-                    <NavButton to="/teesheet">Teesheet</NavButton>
-                    <FeedNavButton />
-                    <NavButton to="/settings">Settings</NavButton>
-
-                    <button
-                        className="sync-button"
-                        disabled={syncing}
-                        onClick={handleRefresh}
-                    >
-                        {syncing ? "Syncing..." : "Refresh data"}
-                    </button>
-                </TopbarActions>
+                <AppNav />
             </header>
 
             <main className="content">

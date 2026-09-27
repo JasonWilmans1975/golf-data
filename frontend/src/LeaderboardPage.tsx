@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { API, authFetch } from "./api";
-import TopbarActions from "./TopbarActions";
+import AppNav from "./AppNav";
 import BrandLogo from "./BrandLogo";
-import NavButton from "./NavButton";
-import FeedNavButton from "./FeedNavButton";
 
 type LeaderboardEntry = {
     user_id: string;
@@ -80,19 +78,7 @@ function LeaderboardPage() {
                     <BrandLogo />
                 </div>
 
-                <TopbarActions>
-                    <NavButton to="/rounds">My Rounds</NavButton>
-                    <NavButton to="/map">World Map</NavButton>
-                    <NavButton to="/stats">Stats</NavButton>
-                    <NavButton to="/handicap">Handicap</NavButton>
-                    <NavButton to="/leaderboard">Leaderboard</NavButton>
-                    <NavButton to="/tournaments">Tournaments</NavButton>
-                    <NavButton to="/friends">Friends</NavButton>
-                    <NavButton to="/wellness">Wellness</NavButton>
-                    <NavButton to="/teesheet">Teesheet</NavButton>
-                    <FeedNavButton />
-                    <NavButton to="/settings">Settings</NavButton>
-                </TopbarActions>
+                <AppNav />
             </header>
 
             <main className="content">

@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from playwright.async_api import async_playwright
+from starlette.concurrency import run_in_threadpool
 
 from .db import supabase, fetch_all
 from .courses import match_handicap_scores_to_courses
@@ -294,6 +295,17 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
         _mark_credentials_invalid(user_id)
         raise
 
+    # Everything below is synchronous Supabase I/O -- scores upsert, course
+    # matching, milestone checks, leaderboard/tournament posts -- dozens of
+    # blocking network calls back to back. This process runs a single
+    # Uvicorn worker per request slot, so running that chain inline would
+    # freeze its event loop (and every other concurrent request it's
+    # serving, down to a trivial CORS preflight) for however long it takes.
+    # Running it on a thread pool worker instead keeps the loop free.
+    return await run_in_threadpool(_finish_sync, user_id, data, is_first_sync)
+
+
+def _finish_sync(user_id: str, data: dict, is_first_sync: bool) -> dict:
     # A successful login proves the credentials are good right now, even if
     # they were flagged invalid before (e.g. a past rejection that turned
     # out to be transient) -- clearing it here is what lets the nightly

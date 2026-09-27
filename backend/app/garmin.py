@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
 from garminconnect import Garmin
+from starlette.concurrency import run_in_threadpool
 
 from .db import supabase
 from .crypto import encrypt, decrypt
@@ -255,6 +256,13 @@ async def sync_garmin_data(user_id: str, force: bool = False):
     activities = result["activities"]
     wellness_rows = result["wellness_rows"]
 
+    # The Garmin fetch itself is already off the event loop (asyncio.to_thread
+    # above) -- but the Supabase upserts that follow are their own run of
+    # blocking network calls, so they get the same treatment.
+    return await run_in_threadpool(_store_garmin_sync, user_id, activities, wellness_rows)
+
+
+def _store_garmin_sync(user_id: str, activities: list, wellness_rows: list) -> dict:
     rows = []
     for activity in activities:
         activity_id = activity.get("activityId")

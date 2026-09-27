@@ -18,12 +18,12 @@ import FriendsPage from "./FriendsPage";
 import LeaderboardPage from "./LeaderboardPage";
 import TournamentsPage from "./TournamentsPage";
 import FeedPage from "./FeedPage";
-import FeedNavButton from "./FeedNavButton";
-import NavButton from "./NavButton";
+import AppNav from "./AppNav";
 import LoginPage from "./LoginPage";
 import TermsPage from "./TermsPage";
 import SettingsPage from "./SettingsPage";
 import { AuthProvider, useAuth } from "./AuthContext";
+import { IntegrationsProvider } from "./IntegrationsContext";
 import { supabase } from "./supabaseClient";
 
 import {
@@ -280,19 +280,7 @@ function Dashboard() {
                     <BrandLogo />
                 </div>
 
-                <TopbarActions>
-                    <NavButton to="/rounds">My Rounds</NavButton>
-                    <NavButton to="/map">World Map</NavButton>
-                    <NavButton to="/stats">Stats</NavButton>
-                    <NavButton to="/handicap">Handicap</NavButton>
-                    <NavButton to="/leaderboard">Leaderboard</NavButton>
-                    <NavButton to="/tournaments">Tournaments</NavButton>
-                    <NavButton to="/friends">Friends</NavButton>
-                    <NavButton to="/wellness">Wellness</NavButton>
-                    <NavButton to="/teesheet">Teesheet</NavButton>
-                    <FeedNavButton />
-                    <NavButton to="/settings">Settings</NavButton>
-                </TopbarActions>
+                <AppNav />
             </header>
 
             <main className="content">
@@ -1145,7 +1133,9 @@ function AppRoutes() {
 function App() {
     return (
         <AuthProvider>
-            <AppRoutes />
+            <IntegrationsProvider>
+                <AppRoutes />
+            </IntegrationsProvider>
         </AuthProvider>
     );
 }

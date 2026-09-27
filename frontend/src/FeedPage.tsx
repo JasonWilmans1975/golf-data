@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
-import TopbarActions from "./TopbarActions";
+import AppNav from "./AppNav";
 import BrandLogo from "./BrandLogo";
 import BottomNav from "./BottomNav";
-import NavButton from "./NavButton";
-import FeedNavButton from "./FeedNavButton";
 import { supabase } from "./supabaseClient";
 import { useAuth } from "./AuthContext";
 import { Avatar, FriendProfileModal } from "./FriendProfileModal";
@@ -943,19 +941,7 @@ function FeedPage() {
                     <BrandLogo />
                 </div>
 
-                <TopbarActions>
-                    <NavButton to="/rounds">My Rounds</NavButton>
-                    <NavButton to="/map">World Map</NavButton>
-                    <NavButton to="/stats">Stats</NavButton>
-                    <NavButton to="/handicap">Handicap</NavButton>
-                    <NavButton to="/leaderboard">Leaderboard</NavButton>
-                    <NavButton to="/tournaments">Tournaments</NavButton>
-                    <NavButton to="/friends">Friends</NavButton>
-                    <NavButton to="/wellness">Wellness</NavButton>
-                    <NavButton to="/teesheet">Teesheet</NavButton>
-                    <FeedNavButton />
-                    <NavButton to="/settings">Settings</NavButton>
-                </TopbarActions>
+                <AppNav />
             </header>
 
             <main className="content">

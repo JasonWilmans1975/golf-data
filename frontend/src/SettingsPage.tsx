@@ -3,14 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { API, authFetch, uploadAvatarPhoto } from "./api";
 import { supabase } from "./supabaseClient";
 import ThemeToggle from "./ThemeToggle";
-import TopbarActions from "./TopbarActions";
+import AppNav from "./AppNav";
 import BrandLogo from "./BrandLogo";
-import NavButton from "./NavButton";
-import FeedNavButton from "./FeedNavButton";
 import { TEESHEET_CLUBS } from "./teesheetClubs";
+import { useIntegrations } from "./IntegrationsContext";
 
 function SettingsPage() {
     const navigate = useNavigate();
+    const { refresh: refreshIntegrations } = useIntegrations();
 
     const [tab, setTab] = useState<"accounts" | "profile">("accounts");
 
@@ -240,6 +240,7 @@ function SettingsPage() {
             setConnected(true);
             setNeedsReconnect(false);
             setPassword("");
+            refreshIntegrations();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Something went wrong");
             setSaving(false);
@@ -323,6 +324,7 @@ function SettingsPage() {
             setGarminConnected(true);
             setGarminPassword("");
             setGarminEditing(false);
+            refreshIntegrations();
         } catch (err) {
             setGarminError(
                 err instanceof Error ? err.message : "Something went wrong"
@@ -393,6 +395,7 @@ function SettingsPage() {
             setTeesheetConnected(true);
             setTeesheetPassword("");
             setTeesheetEditing(false);
+            refreshIntegrations();
         } catch (err) {
             setTeesheetError(
                 err instanceof Error ? err.message : "Something went wrong"
@@ -467,23 +470,7 @@ function SettingsPage() {
                     <BrandLogo />
                 </div>
 
-                <TopbarActions>
-                    <NavButton to="/rounds">My Rounds</NavButton>
-                    <NavButton to="/map">World Map</NavButton>
-                    <NavButton to="/stats">Stats</NavButton>
-                    <NavButton to="/handicap">Handicap</NavButton>
-                    <NavButton to="/leaderboard">Leaderboard</NavButton>
-                    <NavButton to="/tournaments">Tournaments</NavButton>
-                    <NavButton to="/friends">Friends</NavButton>
-                    <NavButton to="/wellness">Wellness</NavButton>
-                    <NavButton to="/teesheet">Teesheet</NavButton>
-                    <FeedNavButton />
-                    <NavButton to="/settings">Settings</NavButton>
-
-                    <button className="header-secondary-button" onClick={handleLogout}>
-                        Log out
-                    </button>
-                </TopbarActions>
+                <AppNav />
             </header>
 
             <main className="content">
