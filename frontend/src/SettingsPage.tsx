@@ -220,6 +220,62 @@ function SettingsPage() {
         window.location.href = `${API}/auth/strava?token=${encodeURIComponent(token)}`;
     }
 
+    async function handleDisconnectStrava() {
+        if (!window.confirm("Log out of Strava? Your existing rounds and routes stay put, but nothing new will sync until you reconnect.")) {
+            return;
+        }
+
+        const response = await authFetch(`${API}/strava/credentials`, { method: "DELETE" });
+
+        if (response.ok) {
+            setStravaConnected(false);
+            refreshIntegrations();
+        }
+    }
+
+    async function handleDisconnectHandicap() {
+        if (!window.confirm("Log out of handicaps.co.za? Your existing rounds and handicap history stay put, but nothing new will sync until you reconnect.")) {
+            return;
+        }
+
+        const response = await authFetch(`${API}/handicap/credentials`, { method: "DELETE" });
+
+        if (response.ok) {
+            setConnected(false);
+            setNeedsReconnect(false);
+            setMemberNo("");
+            refreshIntegrations();
+        }
+    }
+
+    async function handleDisconnectGarmin() {
+        if (!window.confirm("Log out of Garmin Connect? Your existing activity and wellness history stay put, but nothing new will sync until you reconnect.")) {
+            return;
+        }
+
+        const response = await authFetch(`${API}/garmin/credentials`, { method: "DELETE" });
+
+        if (response.ok) {
+            setGarminConnected(false);
+            setGarminEmail("");
+            refreshIntegrations();
+        }
+    }
+
+    async function handleDisconnectTeesheet() {
+        if (!window.confirm("Log out of Teesheet.co.za? Your existing bookings and transactions stay put, but nothing new will sync until you reconnect.")) {
+            return;
+        }
+
+        const response = await authFetch(`${API}/teesheet/credentials`, { method: "DELETE" });
+
+        if (response.ok) {
+            setTeesheetConnected(false);
+            setTeesheetClubId("");
+            refreshIntegrations();
+        }
+    }
+
     async function handleSaveCredentials(event: FormEvent) {
         event.preventDefault();
         setError(null);
@@ -537,6 +593,14 @@ function SettingsPage() {
                                             <button className="integration-action-button" onClick={handleConnectStrava}>
                                                 {stravaConnected ? "Reconnect" : "Connect"}
                                             </button>
+                                            {stravaConnected && (
+                                                <button
+                                                    className="integration-action-button integration-action-button--danger"
+                                                    onClick={handleDisconnectStrava}
+                                                >
+                                                    Log out
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -576,6 +640,14 @@ function SettingsPage() {
                                             >
                                                 {!connected ? "Connect" : handicapEditing ? "Cancel" : "Change credentials"}
                                             </button>
+                                            {connected && !handicapEditing && (
+                                                <button
+                                                    className="integration-action-button integration-action-button--danger"
+                                                    onClick={handleDisconnectHandicap}
+                                                >
+                                                    Log out
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -658,6 +730,14 @@ function SettingsPage() {
                                             >
                                                 {!garminConnected ? "Connect" : garminEditing ? "Cancel" : "Change credentials"}
                                             </button>
+                                            {garminConnected && !garminEditing && (
+                                                <button
+                                                    className="integration-action-button integration-action-button--danger"
+                                                    onClick={handleDisconnectGarmin}
+                                                >
+                                                    Log out
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -739,6 +819,14 @@ function SettingsPage() {
                                                     ? "Cancel"
                                                     : "Change credentials"}
                                             </button>
+                                            {teesheetConnected && !teesheetEditing && (
+                                                <button
+                                                    className="integration-action-button integration-action-button--danger"
+                                                    onClick={handleDisconnectTeesheet}
+                                                >
+                                                    Log out
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from .config import settings
 from .db import supabase, fetch_all
 from .auth import get_current_user_id, get_user_id_from_token
-from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities
+from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities, delete_tokens as delete_strava_tokens
 from .courses import (
     detect_all_courses,
     get_courses_for_user,
@@ -23,15 +23,18 @@ from .handicap import (
     sync_handicap_data,
     sync_all_users,
     save_credentials,
+    delete_credentials as delete_handicap_credentials,
     get_credentials_status as get_handicap_credentials_status,
 )
 from .garmin import (
     sync_garmin_data,
     save_credentials as save_garmin_credentials,
+    delete_credentials as delete_garmin_credentials,
     get_credentials_status as get_garmin_credentials_status,
 )
 from .teesheet import (
     save_credentials as save_teesheet_credentials,
+    delete_credentials as delete_teesheet_credentials,
     get_credentials_status as get_teesheet_credentials_status,
     sync_teesheet_data,
 )
@@ -142,6 +145,11 @@ def strava_status(user_id: str = Depends(get_current_user_id)):
         .execute()
     )
     return {"connected": bool(token_resp.data)}
+
+@app.delete("/strava/credentials")
+def strava_disconnect(user_id: str = Depends(get_current_user_id)):
+    delete_strava_tokens(user_id)
+    return {"disconnected": True}
 
 @app.post("/sync")
 async def sync(user_id: str = Depends(get_current_user_id)):
@@ -302,6 +310,12 @@ def garmin_credentials_status(user_id: str = Depends(get_current_user_id)):
     return {"connected": status is not None, "email": status["email"] if status else None}
 
 
+@app.delete("/garmin/credentials")
+def garmin_disconnect(user_id: str = Depends(get_current_user_id)):
+    delete_garmin_credentials(user_id)
+    return {"disconnected": True}
+
+
 @app.post("/garmin/sync")
 async def garmin_sync(force: bool = False, user_id: str = Depends(get_current_user_id)):
     try:
@@ -353,6 +367,12 @@ def teesheet_credentials_status(user_id: str = Depends(get_current_user_id)):
         "club_name": status["club_name"] if status else None,
         "member_id": status["member_id"] if status else None,
     }
+
+
+@app.delete("/teesheet/credentials")
+def teesheet_disconnect(user_id: str = Depends(get_current_user_id)):
+    delete_teesheet_credentials(user_id)
+    return {"disconnected": True}
 
 
 @app.post("/teesheet/sync")
@@ -431,6 +451,12 @@ def handicap_credentials_status(user_id: str = Depends(get_current_user_id)):
         "member_no": status["member_no"] if status else None,
         "needs_reconnect": bool(status and status.get("invalid_since")),
     }
+
+
+@app.delete("/handicap/credentials")
+def handicap_disconnect(user_id: str = Depends(get_current_user_id)):
+    delete_handicap_credentials(user_id)
+    return {"disconnected": True}
 
 
 @app.post("/handicap/sync")

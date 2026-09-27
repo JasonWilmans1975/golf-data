@@ -2129,6 +2129,17 @@ button {
     border-color: var(--accent);
 }
 
+.integration-action-button--danger {
+    color: var(--error);
+    border-color: var(--error);
+}
+
+.integration-action-button--danger:hover {
+    background: var(--error);
+    border-color: var(--error);
+    color: #fff;
+}
+
 .integration-form {
     margin-top: 12px;
     padding-top: 12px;

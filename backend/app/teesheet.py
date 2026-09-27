@@ -22,6 +22,10 @@ def save_credentials(user_id: str, club_id: int, club_name: str, member_id: str,
     }).execute()
 
 
+def delete_credentials(user_id: str) -> None:
+    supabase.table("teesheet_credentials").delete().eq("user_id", user_id).execute()
+
+
 def get_credentials_status(user_id: str) -> dict | None:
     response = (
         supabase

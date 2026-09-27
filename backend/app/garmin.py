@@ -35,6 +35,10 @@ def save_credentials(user_id: str, email: str, password: str):
     }).execute()
 
 
+def delete_credentials(user_id: str) -> None:
+    supabase.table("garmin_credentials").delete().eq("user_id", user_id).execute()
+
+
 def get_credentials_status(user_id: str) -> dict | None:
     response = (
         supabase

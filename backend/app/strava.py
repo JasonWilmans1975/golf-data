@@ -8,6 +8,10 @@ TOKEN_URL = "https://www.strava.com/oauth/token"
 API_BASE = "https://www.strava.com/api/v3"
 
 
+def delete_tokens(user_id: str) -> None:
+    supabase.table("strava_tokens").delete().eq("user_id", user_id).execute()
+
+
 def authorization_url(user_id: str) -> str:
     return (
         f"{AUTH_URL}?client_id={settings.strava_client_id}"

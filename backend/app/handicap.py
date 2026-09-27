@@ -75,6 +75,10 @@ def save_credentials(user_id: str, member_no: str, password: str):
     }).execute()
 
 
+def delete_credentials(user_id: str) -> None:
+    supabase.table("handicap_credentials").delete().eq("user_id", user_id).execute()
+
+
 def get_credentials_status(user_id: str) -> dict | None:
     response = (
         supabase
