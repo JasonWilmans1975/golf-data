@@ -20,8 +20,14 @@
 # background revalidation swaps in the current one. The hashed files under
 # /assets/ are safe to cache forever instead, since a new build always gets
 # new filenames rather than overwriting old content.
+#
+# sw.js and manifest.webmanifest need the same treatment, for the same
+# reason index.html does: they're the un-hashed entry points a browser has
+# to re-check to ever notice a new deploy exists. A long-cached sw.js in
+# particular would mean the PWA's own update mechanism never gets a chance
+# to run at all.
 <IfModule mod_headers.c>
-  <FilesMatch "^index\.html$">
+  <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
     Header set Cache-Control "no-cache, must-revalidate"
   </FilesMatch>
 </IfModule>
