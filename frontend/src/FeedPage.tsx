@@ -465,6 +465,7 @@ function FeedPage() {
 
     const [postPhotoUrl, setPostPhotoUrl] = useState<string | null>(null);
     const [postPhotoUploading, setPostPhotoUploading] = useState(false);
+    const [composerOpen, setComposerOpen] = useState(false);
 
     const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const feedCardRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -917,6 +918,7 @@ function FeedPage() {
                 setPostPhotoUrl(null);
                 setShareTarget(null);
                 setEmojiPickerOpen(null);
+                setComposerOpen(false);
                 await loadFeed(true);
             }
         } catch (error) {
@@ -933,7 +935,7 @@ function FeedPage() {
     function startRepost(item: FeedItem) {
         setShareTarget(item);
         setShareMenuOpen(null);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        setComposerOpen(true);
     }
 
 
@@ -954,96 +956,29 @@ function FeedPage() {
                         <span className="spinner" /> Syncing your latest handicap scores...
                     </p>
                 )}
-                <div className="feed-card">
-                    {shareTarget && (
-                        <div className="feed-share-preview">
-                            <span>Sharing {shareTarget.player_name}'s {shareTarget.item_type}</span>
-                            <button type="button" onClick={() => setShareTarget(null)}>
-                                ✕
-                            </button>
-                        </div>
-                    )}
+                <div className="feed-card feed-composer-trigger-card">
+                    <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
 
-                    {postPhotoUrl && (
-                        <div className="post-photo-preview">
-                            <img src={postPhotoUrl} alt="" />
-                            <button type="button" onClick={() => setPostPhotoUrl(null)}>
-                                ✕
-                            </button>
-                        </div>
-                    )}
+                    <button
+                        type="button"
+                        className="feed-composer-trigger"
+                        onClick={() => setComposerOpen(true)}
+                    >
+                        {`What's on your mind${myName ? `, ${myName}` : ""}?`}
+                    </button>
 
-                    <form className="feed-comment-form" onSubmit={handleSubmitPost}>
-                        <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
-
-                        <div className="feed-comment-input-wrap">
-                            <input
-                                className="settings-input feed-composer-input"
-                                placeholder={`What's on your mind${myName ? `, ${myName}` : ""}?`}
-                                value={drafts[NEW_POST_KEY] || ""}
-                                onChange={(event) => handleDraftChange(NEW_POST_KEY, event.target.value)}
-                            />
-
-                            {mentionSuggestions(NEW_POST_KEY).length > 0 && (
-                                <div className="mention-dropdown">
-                                    {mentionSuggestions(NEW_POST_KEY).map((friend) => (
-                                        <button
-                                            type="button"
-                                            key={friend.user_id}
-                                            onClick={() => selectMention(NEW_POST_KEY, friend.display_name)}
-                                        >
-                                            @{friend.display_name}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <label className="composer-icon-button" aria-label="Add a photo">
-                            {postPhotoUploading ? "..." : <ImageIcon />}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                hidden
-                                onChange={(event) =>
-                                    handlePostPhotoSelect(event.target.files?.[0])
-                                }
-                            />
-                        </label>
-
-                        <div className="feed-comment-emoji-wrap">
-                            <button
-                                type="button"
-                                className="composer-icon-button"
-                                aria-label="Add an emoji"
-                                onClick={() => toggleEmojiPicker(NEW_POST_KEY)}
-                            >
-                                <SmileIcon />
-                            </button>
-
-                            {emojiPickerOpen === NEW_POST_KEY && (
-                                <div className="emoji-picker">
-                                    {EMOJIS.map((emoji) => (
-                                        <button
-                                            type="button"
-                                            key={emoji}
-                                            onClick={() => insertEmoji(NEW_POST_KEY, emoji)}
-                                        >
-                                            {emoji}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        <button
-                            className="sync-button"
-                            type="submit"
-                            disabled={posting.has(NEW_POST_KEY) || postPhotoUploading}
-                        >
-                            {posting.has(NEW_POST_KEY) ? "Posting..." : "Post"}
-                        </button>
-                    </form>
+                    <label className="composer-icon-button" aria-label="Add a photo">
+                        <ImageIcon />
+                        <input
+                            type="file"
+                            accept="image/*"
+                            hidden
+                            onChange={(event) => {
+                                setComposerOpen(true);
+                                handlePostPhotoSelect(event.target.files?.[0]);
+                            }}
+                        />
+                    </label>
                 </div>
 
                 {loading ? (
@@ -1338,6 +1273,119 @@ function FeedPage() {
 
             {openProfileUserId && (
                 <FriendProfileModal userId={openProfileUserId} onClose={() => setOpenProfileUserId(null)} />
+            )}
+
+            {composerOpen && (
+                <div className="modal-overlay" onClick={() => setComposerOpen(false)}>
+                    <div className="modal-card post-composer-card" onClick={(event) => event.stopPropagation()}>
+                        <button
+                            className="modal-close"
+                            onClick={() => setComposerOpen(false)}
+                            aria-label="Close"
+                        >
+                            ✕
+                        </button>
+
+                        <div className="post-composer-header">
+                            <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
+                            <strong>{myName || "You"}</strong>
+                        </div>
+
+                        <form className="post-composer-form" onSubmit={handleSubmitPost}>
+                            {shareTarget && (
+                                <div className="feed-share-preview">
+                                    <span>Sharing {shareTarget.player_name}'s {shareTarget.item_type}</span>
+                                    <button type="button" onClick={() => setShareTarget(null)}>
+                                        ✕
+                                    </button>
+                                </div>
+                            )}
+
+                            {postPhotoUrl && (
+                                <div className="post-photo-preview">
+                                    <img src={postPhotoUrl} alt="" />
+                                    <button type="button" onClick={() => setPostPhotoUrl(null)}>
+                                        ✕
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="feed-comment-input-wrap">
+                                <textarea
+                                    className="settings-input post-composer-textarea"
+                                    placeholder={`What's on your mind${myName ? `, ${myName}` : ""}?`}
+                                    value={drafts[NEW_POST_KEY] || ""}
+                                    onChange={(event) => handleDraftChange(NEW_POST_KEY, event.target.value)}
+                                    autoFocus
+                                    rows={5}
+                                />
+
+                                {mentionSuggestions(NEW_POST_KEY).length > 0 && (
+                                    <div className="mention-dropdown">
+                                        {mentionSuggestions(NEW_POST_KEY).map((friend) => (
+                                            <button
+                                                type="button"
+                                                key={friend.user_id}
+                                                onClick={() => selectMention(NEW_POST_KEY, friend.display_name)}
+                                            >
+                                                @{friend.display_name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="post-composer-actions">
+                                <label className="composer-icon-button" aria-label="Add a photo">
+                                    {postPhotoUploading ? "..." : <ImageIcon />}
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        hidden
+                                        onChange={(event) =>
+                                            handlePostPhotoSelect(event.target.files?.[0])
+                                        }
+                                    />
+                                </label>
+
+                                <span className="post-composer-hint">Type @ to tag a friend</span>
+
+                                <div className="feed-comment-emoji-wrap">
+                                    <button
+                                        type="button"
+                                        className="composer-icon-button"
+                                        aria-label="Add an emoji"
+                                        onClick={() => toggleEmojiPicker(NEW_POST_KEY)}
+                                    >
+                                        <SmileIcon />
+                                    </button>
+
+                                    {emojiPickerOpen === NEW_POST_KEY && (
+                                        <div className="emoji-picker">
+                                            {EMOJIS.map((emoji) => (
+                                                <button
+                                                    type="button"
+                                                    key={emoji}
+                                                    onClick={() => insertEmoji(NEW_POST_KEY, emoji)}
+                                                >
+                                                    {emoji}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <button
+                                className="sync-button post-composer-submit"
+                                type="submit"
+                                disabled={posting.has(NEW_POST_KEY) || postPhotoUploading}
+                            >
+                                {posting.has(NEW_POST_KEY) ? "Posting..." : "Post"}
+                            </button>
+                        </form>
+                    </div>
+                </div>
             )}
         </div>
     );
