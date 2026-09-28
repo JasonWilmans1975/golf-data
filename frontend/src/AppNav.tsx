@@ -22,7 +22,6 @@ function AppNav() {
             {show(hasCourseData) && <NavButton to="/rounds">My Rounds</NavButton>}
             {show(hasCourseData) && <NavButton to="/map">World Map</NavButton>}
             {show(hasCourseData) && <NavButton to="/stats">Stats</NavButton>}
-            {show(handicap) && <NavButton to="/handicap">Handicap</NavButton>}
             {show(handicap) && <NavButton to="/leaderboard">Leaderboard</NavButton>}
             {show(handicap) && <NavButton to="/tournaments">Tournaments</NavButton>}
             <NavButton to="/friends">Friends</NavButton>

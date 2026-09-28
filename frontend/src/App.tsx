@@ -11,7 +11,6 @@ import "./styles.css";
 
 import StatsPage from "./StatsPage";
 import MapPage from "./MapPage";
-import HandicapPage from "./HandicapPage";
 import WellnessPage from "./WellnessPage";
 import TeesheetPage from "./TeesheetPage";
 import FriendsPage from "./FriendsPage";
@@ -1057,11 +1056,7 @@ function AppRoutes() {
 
             <Route
                 path="/handicap"
-                element={
-                    <RequireAuth>
-                        <HandicapPage />
-                    </RequireAuth>
-                }
+                element={<Navigate to="/stats" replace />}
             />
 
             <Route

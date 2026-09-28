@@ -566,7 +566,7 @@ function FeedPage() {
 
         async function syncHandicapThenRefresh() {
             // Same "show what's already there, sync in the background" pattern
-            // as HandicapPage -- the Feed shouldn't block on a handicaps.co.za
+            // as StatsPage -- the Feed shouldn't block on a handicaps.co.za
             // scrape, but a new round showing up there should still show up
             // here without the user needing to manually refresh.
             setSyncingHandicap(true);
