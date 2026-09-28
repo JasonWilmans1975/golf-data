@@ -83,7 +83,10 @@ const REACTION_EMOJI: Record<string, string> = {
     angry: "😠",
 };
 
-const APP_URL = "https://slogs.co.za/handicap";
+// Derived from wherever the app is actually running rather than hardcoded --
+// this one source file is shared by both the golfcircle.me and
+// slogs.co.za/handicap builds.
+const APP_URL = `${window.location.origin}${import.meta.env.BASE_URL}`;
 const NEW_POST_KEY = "new-post";
 
 function itemKey(itemType: string, itemId: number) {
