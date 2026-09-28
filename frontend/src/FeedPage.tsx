@@ -50,6 +50,7 @@ type FeedItem = {
     comment_count: number;
     reactions: ReactionSummary;
     is_system_generated: boolean;
+    edited_at: string | null;
 };
 
 type Comment = {
@@ -190,6 +191,16 @@ function ShareIcon() {
             <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
             <path d="M16 6l-4-4-4 4" />
             <path d="M12 2v14" />
+        </Icon>
+    );
+}
+
+function MoreIcon() {
+    return (
+        <Icon>
+            <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+            <circle cx="12" cy="19" r="1" fill="currentColor" stroke="none" />
         </Icon>
     );
 }
@@ -466,6 +477,8 @@ function FeedPage() {
     const [postPhotoUrl, setPostPhotoUrl] = useState<string | null>(null);
     const [postPhotoUploading, setPostPhotoUploading] = useState(false);
     const [composerOpen, setComposerOpen] = useState(false);
+    const [editingPostId, setEditingPostId] = useState<number | null>(null);
+    const [postMenuOpen, setPostMenuOpen] = useState<string | null>(null);
 
     const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const feedCardRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -652,6 +665,7 @@ function FeedPage() {
 
             if (!target.closest(".reaction-bar")) setReactionPickerOpen(null);
             if (!target.closest(".feed-share-wrap")) setShareMenuOpen(null);
+            if (!target.closest(".feed-post-menu-wrap")) setPostMenuOpen(null);
             if (!target.closest(".feed-comment-emoji-wrap")) setEmojiPickerOpen(null);
             if (!target.closest(".feed-comment-input-wrap")) setMentionQuery({});
         }
@@ -894,6 +908,15 @@ function FeedPage() {
         }
     }
 
+    function closeComposer() {
+        setComposerOpen(false);
+        setEditingPostId(null);
+        setDrafts((prev) => ({ ...prev, [NEW_POST_KEY]: "" }));
+        setPostPhotoUrl(null);
+        setShareTarget(null);
+        setEmojiPickerOpen(null);
+    }
+
     async function handleSubmitPost(event: FormEvent) {
         event.preventDefault();
         const body = (drafts[NEW_POST_KEY] || "").trim();
@@ -902,23 +925,25 @@ function FeedPage() {
         setPosting((prev) => new Set(prev).add(NEW_POST_KEY));
 
         try {
-            const response = await authFetch(`${API}/feed/posts`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    body,
-                    photo_url: postPhotoUrl,
-                    shared_item_type: shareTarget?.item_type ?? null,
-                    shared_item_id: shareTarget?.item_id ?? null,
-                }),
-            });
+            const response = editingPostId
+                ? await authFetch(`${API}/feed/posts/${editingPostId}`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ body, photo_url: postPhotoUrl }),
+                  })
+                : await authFetch(`${API}/feed/posts`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                          body,
+                          photo_url: postPhotoUrl,
+                          shared_item_type: shareTarget?.item_type ?? null,
+                          shared_item_id: shareTarget?.item_id ?? null,
+                      }),
+                  });
 
             if (response.ok) {
-                setDrafts((prev) => ({ ...prev, [NEW_POST_KEY]: "" }));
-                setPostPhotoUrl(null);
-                setShareTarget(null);
-                setEmojiPickerOpen(null);
-                setComposerOpen(false);
+                closeComposer();
                 await loadFeed(true);
             }
         } catch (error) {
@@ -929,6 +954,33 @@ function FeedPage() {
                 next.delete(NEW_POST_KEY);
                 return next;
             });
+        }
+    }
+
+    function startEditPost(item: FeedItem) {
+        setEditingPostId(item.item_id);
+        setDrafts((prev) => ({ ...prev, [NEW_POST_KEY]: item.body || "" }));
+        setPostPhotoUrl(item.photo_url);
+        setShareTarget(null);
+        setPostMenuOpen(null);
+        setComposerOpen(true);
+    }
+
+    async function handleDeletePost(item: FeedItem) {
+        if (!window.confirm("Delete this post? This can't be undone.")) return;
+
+        setPostMenuOpen(null);
+
+        try {
+            const response = await authFetch(`${API}/feed/posts/${item.item_id}`, {
+                method: "DELETE",
+            });
+
+            if (response.ok) {
+                await loadFeed(true);
+            }
+        } catch (error) {
+            console.error(error);
         }
     }
 
@@ -1017,8 +1069,39 @@ function FeedPage() {
 
                                     <div>
                                         <strong>{item.player_name}</strong>
-                                        <span>{formatRelative(item.posted_at)}</span>
+                                        <span>
+                                            {formatRelative(item.posted_at)}
+                                            {item.edited_at && " · Edited"}
+                                        </span>
                                     </div>
+
+                                    {item.item_type === "post" &&
+                                        !item.is_system_generated &&
+                                        item.user_id === myUserId && (
+                                            <div className="feed-post-menu-wrap">
+                                                <button
+                                                    type="button"
+                                                    className="composer-icon-button feed-post-menu-toggle"
+                                                    aria-label="Post options"
+                                                    onClick={() =>
+                                                        setPostMenuOpen((prev) => (prev === key ? null : key))
+                                                    }
+                                                >
+                                                    <MoreIcon />
+                                                </button>
+
+                                                {postMenuOpen === key && (
+                                                    <div className="share-menu">
+                                                        <button type="button" onClick={() => startEditPost(item)}>
+                                                            Edit post
+                                                        </button>
+                                                        <button type="button" onClick={() => handleDeletePost(item)}>
+                                                            Delete post
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                 </div>
 
                                 {item.body && (
@@ -1276,11 +1359,11 @@ function FeedPage() {
             )}
 
             {composerOpen && (
-                <div className="modal-overlay" onClick={() => setComposerOpen(false)}>
+                <div className="modal-overlay" onClick={closeComposer}>
                     <div className="modal-card post-composer-card" onClick={(event) => event.stopPropagation()}>
                         <button
                             className="modal-close"
-                            onClick={() => setComposerOpen(false)}
+                            onClick={closeComposer}
                             aria-label="Close"
                         >
                             ✕
@@ -1288,7 +1371,7 @@ function FeedPage() {
 
                         <div className="post-composer-header">
                             <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
-                            <strong>{myName || "You"}</strong>
+                            <strong>{editingPostId ? "Edit post" : myName || "You"}</strong>
                         </div>
 
                         <form className="post-composer-form" onSubmit={handleSubmitPost}>
@@ -1381,7 +1464,9 @@ function FeedPage() {
                                 type="submit"
                                 disabled={posting.has(NEW_POST_KEY) || postPhotoUploading}
                             >
-                                {posting.has(NEW_POST_KEY) ? "Posting..." : "Post"}
+                                {posting.has(NEW_POST_KEY)
+                                    ? editingPostId ? "Saving..." : "Posting..."
+                                    : editingPostId ? "Save" : "Post"}
                             </button>
                         </form>
                     </div>

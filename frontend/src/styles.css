@@ -1503,6 +1503,11 @@ button {
     display: flex;
 }
 
+.feed-post-menu-wrap {
+    position: relative;
+    margin-left: auto;
+}
+
 .share-menu {
     position: absolute;
     top: 100%;

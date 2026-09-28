@@ -54,6 +54,8 @@ from .friends import (
     get_friends_feed,
     get_activity_feed_with_comments,
     create_post,
+    update_post,
+    delete_post,
     list_comments,
     list_comments_batch,
     add_comment,
@@ -748,6 +750,29 @@ def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
+
+
+class PostEditBody(BaseModel):
+    body: str = ""
+    photo_url: str | None = None
+
+
+@app.put("/feed/posts/{post_id}")
+def feed_update_post(post_id: int, body: PostEditBody, user_id: str = Depends(get_current_user_id)):
+    try:
+        return update_post(user_id, post_id, body.body, body.photo_url)
+    except ValueError as exc:
+        raise HTTPException(404 if str(exc) == "Post not found" else 400, detail=str(exc))
+
+
+@app.delete("/feed/posts/{post_id}")
+def feed_delete_post(post_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        delete_post(user_id, post_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+    return {"deleted": True}
 
 
 @app.post("/feed/posts/photo")

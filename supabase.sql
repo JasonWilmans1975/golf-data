@@ -579,3 +579,7 @@ alter table if exists public.posts add column if not exists is_system_generated 
 -- same result every time between syncs. Computed once per sync instead and
 -- cached here.
 alter table if exists public.handicap_sync_state add column if not exists home_course_id bigint references public.courses(id);
+
+-- Set when a post's body/photo is edited after creation, so the Feed can
+-- show an "(edited)" marker -- left null on posts that never change.
+alter table if exists public.posts add column if not exists edited_at timestamptz;

@@ -810,6 +810,46 @@ def create_post(
     return response.data[0]
 
 
+def update_post(user_id: str, post_id: int, body: str, photo_url: str | None) -> dict:
+    existing = supabase.table("posts").select("id,user_id").eq("id", post_id).limit(1).execute()
+
+    if not existing.data:
+        raise ValueError("Post not found")
+
+    if existing.data[0]["user_id"] != user_id:
+        raise ValueError("Post not found")
+
+    body = body.strip()
+
+    if not body and not photo_url:
+        raise ValueError("Post can't be empty")
+
+    if len(body) > 2000:
+        raise ValueError("Post is too long")
+
+    response = (
+        supabase
+        .table("posts")
+        .update({"body": body, "photo_url": photo_url, "edited_at": _now()})
+        .eq("id", post_id)
+        .execute()
+    )
+
+    return response.data[0]
+
+
+def delete_post(user_id: str, post_id: int) -> None:
+    existing = supabase.table("posts").select("id,user_id").eq("id", post_id).limit(1).execute()
+
+    if not existing.data:
+        raise ValueError("Post not found")
+
+    if existing.data[0]["user_id"] != user_id:
+        raise ValueError("Post not found")
+
+    supabase.table("posts").delete().eq("id", post_id).execute()
+
+
 def _item_owner(item_type: str, item_id: int) -> str | None:
     if item_type not in ("round", "post"):
         return None
@@ -1035,7 +1075,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         response = (
             supabase
             .table("posts")
-            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at,is_system_generated")
+            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at,is_system_generated,edited_at")
             .in_("user_id", circle_ids)
             .order("created_at", desc=True)
             .limit(fetch_count)
@@ -1129,6 +1169,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "comment_count": comment_count,
                 "reactions": reactions,
                 "is_system_generated": False,
+                "edited_at": None,
             })
         else:
             shared_item = None
@@ -1157,6 +1198,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "comment_count": comment_count,
                 "reactions": reactions,
                 "is_system_generated": bool(raw.get("is_system_generated")),
+                "edited_at": raw.get("edited_at"),
             })
 
     return {"items": items, "comments": comments_by_key}
