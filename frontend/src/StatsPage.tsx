@@ -198,7 +198,7 @@ function StatsPage() {
                 year,
                 rounds,
             }))
-            .sort((a, b) => Number(a.year) - Number(b.year));
+            .sort((a, b) => Number(b.year) - Number(a.year));
     }, [allScores]);
 
     const totalDistance = activities.reduce(
@@ -414,11 +414,11 @@ function StatsPage() {
                             </div>
                         </div>
 
-                        <div className="stats-grid" style={{ marginTop: 0 }}>
+                        <div className="round-list">
                             {roundsByYear.map((row) => (
-                                <div className="stat-card" key={row.year}>
-                                    <span>{row.year}</span>
-                                    <strong>{row.rounds}</strong>
+                                <div className="year-row" key={row.year}>
+                                    <strong>{row.year}</strong>
+                                    <span>{row.rounds} {row.rounds === 1 ? "round" : "rounds"}</span>
                                 </div>
                             ))}
                         </div>

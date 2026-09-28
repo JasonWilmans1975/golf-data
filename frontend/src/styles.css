@@ -695,6 +695,24 @@ button {
     padding: 16px 20px;
 }
 
+.year-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--panel);
+    padding: 14px 20px;
+}
+
+.year-row strong {
+    font-size: 14px;
+    color: var(--text);
+}
+
+.year-row span {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
 .round-row div {
     display: flex;
     flex-direction: column;
