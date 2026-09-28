@@ -222,8 +222,7 @@ function Dashboard() {
                 const token = data.session?.access_token;
 
                 if (token) {
-                    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
-                    window.location.href = `${API}/auth/strava?token=${encodeURIComponent(token)}&redirect_to=${encodeURIComponent(redirectTo)}`;
+                    window.location.href = `${API}/auth/strava?token=${encodeURIComponent(token)}`;
                 }
 
                 return;

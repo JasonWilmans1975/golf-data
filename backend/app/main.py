@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from .config import settings
 from .db import supabase, fetch_all
 from .auth import get_current_user_id, get_user_id_from_token
-from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities, delete_tokens as delete_strava_tokens, parse_state as parse_strava_state, safe_redirect_target
+from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities, delete_tokens as delete_strava_tokens
 from .courses import (
     detect_all_courses,
     get_courses_for_user,
@@ -78,7 +78,7 @@ logger = logging.getLogger("golfcircle")
 app = FastAPI(title="GolfCircle API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.frontend_urls,
+    allow_origins=[settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,7 +97,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     origin = request.headers.get("origin")
 
     headers = {}
-    if origin in settings.frontend_urls:
+    if origin == settings.frontend_url:
         headers["Access-Control-Allow-Origin"] = origin
         headers["Access-Control-Allow-Credentials"] = "true"
 
@@ -112,15 +112,15 @@ def health():
     return {"ok": True}
 
 @app.get("/auth/strava")
-def auth_strava(token: str, redirect_to: str | None = None):
+def auth_strava(token: str):
     user_id = get_user_id_from_token(token)
-    return RedirectResponse(authorization_url(user_id, redirect_to))
+    return RedirectResponse(authorization_url(user_id))
 
 @app.get("/auth/strava/callback")
 async def auth_callback(code: str | None = None, error: str | None = None, state: str | None = None):
     if error or not code or not state:
         raise HTTPException(400, detail=error or "Missing authorization code")
-    user_id, redirect_to = parse_strava_state(state)
+    user_id = state
     data = await exchange_code(code)
     athlete = data["athlete"]
     row = {
@@ -133,7 +133,7 @@ async def auth_callback(code: str | None = None, error: str | None = None, state
         "athlete": athlete,
     }
     supabase.table("strava_tokens").upsert(row, on_conflict="athlete_id").execute()
-    return RedirectResponse(f"{safe_redirect_target(redirect_to)}?connected=1")
+    return RedirectResponse(f"{settings.app_url}/?connected=1")
 
 @app.get("/strava/status")
 def strava_status(user_id: str = Depends(get_current_user_id)):

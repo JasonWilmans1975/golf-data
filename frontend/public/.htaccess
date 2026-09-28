@@ -1,6 +1,6 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteBase /handicap/
+  RewriteBase /
 
   # Plain http:// was serving the site directly with no redirect at all --
   # browsers correctly flag that as "Not Secure" since it's genuinely

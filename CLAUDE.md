@@ -9,22 +9,21 @@ Auth, Storage).
 
 - **Backend**: `api.slogs.co.za`, hosted on Render as a Docker service built
   from `backend/Dockerfile`. **Auto-deploys on push to `main`.** Runs
-  `uvicorn app.main:app --workers 2`.
-- **Frontend has no CI/CD.** It's built locally and manually uploaded to
-  cPanel. There are **two separate production builds from one source tree**:
-  - `npm run build` → `dist/`, base path `/handicap/`, uploaded to
-    slogs.co.za's `/handicap` document root.
-  - `npm run build:golfcircle` → `dist-golfcircle/`, base path `/`,
-    uploaded to **golfcircle.me's document root — this is the production
-    domain**, not slogs.co.za.
-  - Both share `frontend/public/.htaccess` (SPA fallback + forced
-    HTTP→HTTPS redirect + cache headers); the `build:golfcircle` script
-    patches `RewriteBase` after the fact, nothing else needs to change per
-    target.
-  - After any frontend change meant to go live: rebuild both, rezip
-    (`handicap-build.zip`, `golfcircle-build.zip` — gitignored), tell the
-    user to upload both to their respective cPanel roots. `zip -r` must
-    NOT exclude dotfiles (`-x ".*"`) or `.htaccess` silently goes missing.
+  `uvicorn app.main:app --workers 2`. Stays on the `api.slogs.co.za` domain
+  even though the frontend moved off slogs.co.za entirely — only the
+  frontend's domain changed, not the backend's.
+- **Frontend has no CI/CD.** It's built locally (`npm run build` → `dist/`,
+  base path `/`) and manually uploaded to cPanel at **golfcircle.me's
+  document root — the only production domain**. slogs.co.za/handicap is
+  retired; don't reintroduce dual-build complexity (base-path env vars, a
+  second `.htaccess` RewriteBase, multi-origin CORS) unless the user asks
+  for another domain again.
+  - After any frontend change meant to go live: rebuild, rezip
+    (`golfcircle-build.zip` — gitignored), tell the user to upload it to
+    golfcircle.me's cPanel root. `zip -r` must NOT exclude dotfiles
+    (`-x ".*"`) or `.htaccess` silently goes missing.
+  - `frontend/public/.htaccess` handles SPA fallback, forced HTTP→HTTPS
+    redirect, and cache headers.
 - **Nightly batch sync**: a separate Render **Cron Job** resource (not the
   web service — own env vars, own "Root Directory: backend" setting since
   the Dockerfile lives at `backend/Dockerfile`) hits
@@ -32,9 +31,8 @@ Auth, Storage).
   midnight UTC. That endpoint must respond instantly (`BackgroundTasks`) —
   the Cron Job's own request timeout will kill a long-running request and
   still report "succeeded" even though nothing happened.
-- CORS: `FRONTEND_URL` env var is **comma-separated** (reinterpreted, not
-  renamed) so both domains can share this one backend —
-  `settings.frontend_urls` splits it.
+- CORS: `FRONTEND_URL` (and `APP_URL`, used for the Strava OAuth redirect
+  target) are single values again — `https://golfcircle.me`.
 
 ## Integrations (all optional, independently connectable per user)
 
