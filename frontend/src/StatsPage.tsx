@@ -15,6 +15,7 @@ import { API, authFetch } from "./api";
 import AppNav from "./AppNav";
 import BrandLogo from "./BrandLogo";
 import { useTheme } from "./useTheme";
+import { useIntegrations } from "./IntegrationsContext";
 
 const CHART_PALETTES = {
     dark: {
@@ -75,6 +76,12 @@ function StatsPage() {
     const navigate = useNavigate();
     const { theme } = useTheme();
     const chart = CHART_PALETTES[theme];
+    // Distance/elevation/GPS come from golf_activities, which is only ever
+    // populated by Strava or Garmin syncs -- showing those cards for
+    // someone connected to neither (e.g. handicaps.co.za only) just shows
+    // rows of zero, which reads as broken rather than empty.
+    const { strava, garmin } = useIntegrations();
+    const hasActivityData = strava || garmin;
 
     const [activities, setActivities] = useState<Activity[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
@@ -195,15 +202,19 @@ function StatsPage() {
                         <strong>{courses.length}</strong>
                     </div>
 
-                    <div className="stat-card">
-                        <span>Golf distance (GPS-tracked)</span>
-                        <strong>{(totalDistance / 1000).toFixed(1)} km</strong>
-                    </div>
+                    {hasActivityData && (
+                        <div className="stat-card">
+                            <span>Golf distance (GPS-tracked)</span>
+                            <strong>{(totalDistance / 1000).toFixed(1)} km</strong>
+                        </div>
+                    )}
 
-                    <div className="stat-card">
-                        <span>Avg distance / tracked round</span>
-                        <strong>{averageDistance.toFixed(1)} km</strong>
-                    </div>
+                    {hasActivityData && (
+                        <div className="stat-card">
+                            <span>Avg distance / tracked round</span>
+                            <strong>{averageDistance.toFixed(1)} km</strong>
+                        </div>
+                    )}
                 </section>
 
                 <section className="chart-grid">
@@ -269,6 +280,7 @@ function StatsPage() {
                         </div>
                     </div>
 
+                    {hasActivityData && (
                     <div className="chart-card chart-card-wide">
                         <div className="chart-heading">
                             <div>
@@ -302,13 +314,16 @@ function StatsPage() {
                             </ResponsiveContainer>
                         </div>
                     </div>
+                    )}
                 </section>
 
                 <section className="stats-summary">
+                    {hasActivityData && (
                     <div>
                         <span>Total elevation climbed while golfing</span>
                         <strong>{Math.round(totalElevation).toLocaleString()} m</strong>
                     </div>
+                    )}
 
                     <div>
                         <span>Most played course</span>
