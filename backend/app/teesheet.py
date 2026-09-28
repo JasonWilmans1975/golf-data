@@ -282,15 +282,29 @@ async def sync_teesheet_data(user_id: str, force: bool = False) -> dict:
 
 
 def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict) -> dict:
+    # Postgres's ON CONFLICT DO UPDATE fails outright ("cannot affect row a
+    # second time") if two rows in the *same* upsert batch share a conflict
+    # key -- seen for real when the scraped statement repeated a doc_number.
+    # Dedupe defensively here (keeping the last occurrence) rather than
+    # relying on the source page to never repeat a row.
     if bookings:
+        deduped_bookings = list({
+            (b.get("play_date"), b.get("play_time"), b.get("course_name")): b
+            for b in bookings
+        }.values())
+
         supabase.table("teesheet_bookings").upsert(
-            [{**b, "user_id": user_id} for b in bookings],
+            [{**b, "user_id": user_id} for b in deduped_bookings],
             on_conflict="user_id,play_date,play_time,course_name",
         ).execute()
 
     if txn_data["transactions"]:
+        deduped_transactions = list({
+            t["doc_number"]: t for t in txn_data["transactions"]
+        }.values())
+
         supabase.table("teesheet_transactions").upsert(
-            [{**t, "user_id": user_id} for t in txn_data["transactions"]],
+            [{**t, "user_id": user_id} for t in deduped_transactions],
             on_conflict="user_id,doc_number",
         ).execute()
 
