@@ -203,28 +203,6 @@ function StatsPage() {
             .sort((a, b) => Number(a.year) - Number(b.year));
     }, [allScores]);
 
-    const distanceByMonth = useMemo(() => {
-        const grouped: Record<string, number> = {};
-
-        activities.forEach((activity) => {
-            const date = new Date(activity.start_date);
-
-            const key = `${date.getFullYear()}-${String(
-                date.getMonth() + 1
-            ).padStart(2, "0")}`;
-
-            grouped[key] =
-                (grouped[key] || 0) + (activity.distance_m || 0) / 1000;
-        });
-
-        return Object.entries(grouped)
-            .map(([month, distance]) => ({
-                month,
-                distance: Number(distance.toFixed(1)),
-            }))
-            .sort((a, b) => a.month.localeCompare(b.month));
-    }, [activities]);
-
     const topCourses = useMemo(() => {
         return [...courses]
             .sort((a, b) => b.rounds_played - a.rounds_played)
@@ -502,41 +480,6 @@ function StatsPage() {
                         </div>
                     </div>
 
-                    {hasActivityData && (
-                        <div className="chart-card chart-card-wide">
-                            <div className="chart-heading">
-                                <div>
-                                    <p className="eyebrow">DISTANCE</p>
-                                    <h3>Golf kilometres over time</h3>
-                                </div>
-                            </div>
-
-                            <div className="chart-container">
-                                <ResponsiveContainer width="100%" height={330}>
-                                    <LineChart data={distanceByMonth}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
-                                        <XAxis
-                                            dataKey="month"
-                                            tick={chart.tick}
-                                        />
-                                        <YAxis tick={chart.tick} />
-                                        <Tooltip
-                                            contentStyle={chart.tooltipStyle}
-                                            labelStyle={chart.tooltipLabelStyle}
-                                            formatter={(value) => [`${value} km`, "Distance"]}
-                                        />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="distance"
-                                            stroke="#3b82f6"
-                                            strokeWidth={3}
-                                            dot={{ r: 4, fill: "#3b82f6" }}
-                                        />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    )}
                 </section>
 
                 <section className="stats-summary">
