@@ -11,11 +11,17 @@ function AppNav() {
     // moment later once we know what's actually connected.
     const show = (flag: boolean) => loading || flag;
 
+    // Courses come from Strava-detected activity AND from handicap sync
+    // (match_handicap_scores_to_courses runs on every handicap sync too), so
+    // anything built purely from the courses table shouldn't require Strava
+    // specifically -- only GPS routes (shown per-course, not here) do.
+    const hasCourseData = strava || handicap;
+
     return (
         <TopbarActions>
-            {show(strava) && <NavButton to="/rounds">My Rounds</NavButton>}
-            {show(strava) && <NavButton to="/map">World Map</NavButton>}
-            {show(strava || handicap) && <NavButton to="/stats">Stats</NavButton>}
+            {show(hasCourseData) && <NavButton to="/rounds">My Rounds</NavButton>}
+            {show(hasCourseData) && <NavButton to="/map">World Map</NavButton>}
+            {show(hasCourseData) && <NavButton to="/stats">Stats</NavButton>}
             {show(handicap) && <NavButton to="/handicap">Handicap</NavButton>}
             {show(handicap) && <NavButton to="/leaderboard">Leaderboard</NavButton>}
             {show(handicap) && <NavButton to="/tournaments">Tournaments</NavButton>}
