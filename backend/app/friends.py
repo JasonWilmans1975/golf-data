@@ -532,24 +532,29 @@ def _reaction_summary(viewer_id: str, items: list[tuple[str, int]]) -> dict[tupl
     return summary
 
 
-def toggle_reaction(user_id: str, item_type: str, item_id: int, reaction: str) -> dict:
-    if reaction not in REACTIONS:
-        raise ValueError("Invalid reaction")
-
+def _resolve_reactable_owner(item_type: str, item_id: int) -> str | None:
     if item_type == "comment":
         comment_response = (
             supabase.table("feed_comments").select("item_type,item_id").eq("id", item_id).limit(1).execute()
         )
 
         if not comment_response.data:
-            raise ValueError("Not found")
+            return None
 
         parent = comment_response.data[0]
-        owner_id = _item_owner(parent["item_type"], parent["item_id"])
-    elif item_type in ("round", "post"):
-        owner_id = _item_owner(item_type, item_id)
-    else:
-        raise ValueError("Invalid item type")
+        return _item_owner(parent["item_type"], parent["item_id"])
+
+    if item_type in ("round", "post"):
+        return _item_owner(item_type, item_id)
+
+    raise ValueError("Invalid item type")
+
+
+def toggle_reaction(user_id: str, item_type: str, item_id: int, reaction: str) -> dict:
+    if reaction not in REACTIONS:
+        raise ValueError("Invalid reaction")
+
+    owner_id = _resolve_reactable_owner(item_type, item_id)
 
     if owner_id is None or not _can_view_item(user_id, owner_id):
         raise ValueError("Not found")
@@ -588,6 +593,49 @@ def toggle_reaction(user_id: str, item_type: str, item_id: int, reaction: str) -
 def get_item_reactions(user_id: str, item_type: str, item_id: int) -> dict:
     summary = _reaction_summary(user_id, [(item_type, item_id)])
     return summary.get((item_type, item_id), _empty_reactions())
+
+
+def get_item_reaction_details(user_id: str, item_type: str, item_id: int) -> list[dict]:
+    """Powers the 'who reacted, with what' popup -- same visibility rule as
+    reacting itself, just the individual rows instead of the aggregate
+    counts get_item_reactions returns."""
+    owner_id = _resolve_reactable_owner(item_type, item_id)
+
+    if owner_id is None or not _can_view_item(user_id, owner_id):
+        raise ValueError("Not found")
+
+    response = (
+        supabase
+        .table("feed_likes")
+        .select("user_id,reaction,created_at")
+        .eq("item_type", item_type)
+        .eq("item_id", item_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    rows = response.data or []
+
+    if not rows:
+        return []
+
+    profiles_response = (
+        supabase
+        .table("profiles")
+        .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
+        .in_("user_id", [row["user_id"] for row in rows])
+        .execute()
+    )
+    profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+
+    return [
+        {
+            "user_id": row["user_id"],
+            "display_name": _display_name(profile_by_user.get(row["user_id"])),
+            "avatar_url": _avatar_url(profile_by_user.get(row["user_id"])),
+            "reaction": row["reaction"],
+        }
+        for row in rows
+    ]
 
 
 def _snapshot_item(item_type: str, item_id: int) -> dict | None:

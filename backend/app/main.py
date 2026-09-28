@@ -62,6 +62,7 @@ from .friends import (
     delete_comment,
     toggle_reaction,
     get_item_reactions,
+    get_item_reaction_details,
     acknowledge_notifications,
     list_notifications,
 )
@@ -860,6 +861,14 @@ def feed_react(
 @app.get("/feed/{item_type}/{item_id}/reactions")
 def feed_item_reactions(item_type: str, item_id: int, user_id: str = Depends(get_current_user_id)):
     return get_item_reactions(user_id, item_type, item_id)
+
+
+@app.get("/feed/{item_type}/{item_id}/reactions/details")
+def feed_item_reaction_details(item_type: str, item_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        return get_item_reaction_details(user_id, item_type, item_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
 
 
 @app.get("/notifications")

@@ -14,6 +14,13 @@ type ReactionSummary = {
     my_reaction: string | null;
 };
 
+type ReactionDetail = {
+    user_id: string;
+    display_name: string;
+    avatar_url: string | null;
+    reaction: string;
+};
+
 type SharedItem = {
     item_type: "round" | "post";
     item_id: number;
@@ -195,6 +202,17 @@ function ShareIcon() {
     );
 }
 
+function PeopleIcon() {
+    return (
+        <Icon>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </Icon>
+    );
+}
+
 function MoreIcon() {
     return (
         <Icon>
@@ -277,22 +295,6 @@ function shareToFacebook(item: FeedItem) {
     window.open(url, "_blank");
 }
 
-function reactionSummary(reactions: ReactionSummary) {
-    if (reactions.total === 0) return null;
-
-    return (
-        <span className="reaction-summary-inline">
-            {Object.entries(reactions.counts)
-                .sort((a, b) => b[1] - a[1])
-                .map(([reaction, count]) => (
-                    <span className="reaction-summary-badge" key={reaction}>
-                        {REACTION_EMOJI[reaction]} {count}
-                    </span>
-                ))}
-        </span>
-    );
-}
-
 function applyReaction(
     current: ReactionSummary,
     previousMine: string | null,
@@ -361,6 +363,54 @@ function ReactionBar({
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+// Facebook-style split: the left side is a summary (icon + total) that opens
+// who-reacted-with-what; the right side is always-visible reaction-type
+// buttons, not hidden behind an extra click. Only used for top-level posts/
+// rounds -- comments keep the older compact click-to-reveal picker (this
+// row would be disproportionately heavy inside a small comment bubble).
+function PostReactionBar({
+    itemType,
+    itemId,
+    reactions,
+    onReact,
+    onShowDetails,
+}: {
+    itemType: string;
+    itemId: number;
+    reactions: ReactionSummary;
+    onReact: (itemType: string, itemId: number, reaction: string) => void;
+    onShowDetails: (itemType: string, itemId: number) => void;
+}) {
+    return (
+        <div className="post-reaction-bar">
+            <button
+                type="button"
+                className="post-reaction-summary"
+                disabled={reactions.total === 0}
+                onClick={() => onShowDetails(itemType, itemId)}
+                aria-label="See who reacted"
+            >
+                <ThumbsUpIcon />
+                {reactions.total > 0 && <span>{reactions.total}</span>}
+            </button>
+
+            <div className="post-reaction-types">
+                {Object.entries(REACTION_EMOJI).map(([reaction, emoji]) => (
+                    <button
+                        type="button"
+                        key={reaction}
+                        className={reactions.my_reaction === reaction ? "active" : ""}
+                        aria-label={reaction}
+                        onClick={() => onReact(itemType, itemId, reaction)}
+                    >
+                        {emoji}
+                    </button>
+                ))}
+            </div>
         </div>
     );
 }
@@ -471,6 +521,9 @@ function FeedPage() {
     const [mentionQuery, setMentionQuery] = useState<Record<string, string>>({});
     const [emojiPickerOpen, setEmojiPickerOpen] = useState<string | null>(null);
     const [reactionPickerOpen, setReactionPickerOpen] = useState<string | null>(null);
+    const [reactionDetailsKey, setReactionDetailsKey] = useState<string | null>(null);
+    const [reactionDetails, setReactionDetails] = useState<ReactionDetail[]>([]);
+    const [reactionDetailsLoading, setReactionDetailsLoading] = useState(false);
     const [shareMenuOpen, setShareMenuOpen] = useState<string | null>(null);
     const [shareTarget, setShareTarget] = useState<FeedItem | null>(null);
 
@@ -479,6 +532,8 @@ function FeedPage() {
     const [composerOpen, setComposerOpen] = useState(false);
     const [editingPostId, setEditingPostId] = useState<number | null>(null);
     const [postMenuOpen, setPostMenuOpen] = useState<string | null>(null);
+    const [composerView, setComposerView] = useState<"compose" | "tagPeople">("compose");
+    const [tagSearch, setTagSearch] = useState("");
 
     const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const feedCardRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -840,6 +895,22 @@ function FeedPage() {
         }
     }
 
+    async function openReactionDetails(itemType: string, itemId: number) {
+        const key = itemKey(itemType, itemId);
+        setReactionDetailsKey(key);
+        setReactionDetailsLoading(true);
+        setReactionDetails([]);
+
+        try {
+            const response = await authFetch(`${API}/feed/${itemType}/${itemId}/reactions/details`);
+            if (response.ok) setReactionDetails(await response.json());
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setReactionDetailsLoading(false);
+        }
+    }
+
     async function react(itemType: string, itemId: number, reaction: string) {
         setReactionPickerOpen(null);
 
@@ -915,6 +986,26 @@ function FeedPage() {
         setPostPhotoUrl(null);
         setShareTarget(null);
         setEmojiPickerOpen(null);
+        setComposerView("compose");
+        setTagSearch("");
+    }
+
+    function isFriendTagged(friend: Friend) {
+        return (drafts[NEW_POST_KEY] || "").includes(`@${friend.display_name}`);
+    }
+
+    function toggleTagFriend(friend: Friend) {
+        const token = `@${friend.display_name}`;
+
+        setDrafts((prev) => {
+            const current = prev[NEW_POST_KEY] || "";
+
+            const next = current.includes(token)
+                ? current.replace(`${token} `, "").replace(token, "")
+                : `${current}${current && !current.endsWith(" ") ? " " : ""}${token} `;
+
+            return { ...prev, [NEW_POST_KEY]: next };
+        });
     }
 
     async function handleSubmitPost(event: FormEvent) {
@@ -1227,22 +1318,13 @@ function FeedPage() {
                                     </a>
                                 )}
 
-                                {reactionSummary(item.reactions) && (
-                                    <div className="feed-meta-row">
-                                        {reactionSummary(item.reactions)}
-                                    </div>
-                                )}
-
                                 <div className="feed-actions-row">
-                                    <ReactionBar
+                                    <PostReactionBar
                                         itemType={item.item_type}
                                         itemId={item.item_id}
                                         reactions={item.reactions}
-                                        reactionPickerOpen={reactionPickerOpen}
-                                        onToggleReactionPicker={(k) =>
-                                            setReactionPickerOpen((prev) => (prev === k ? null : k))
-                                        }
                                         onReact={react}
+                                        onShowDetails={openReactionDetails}
                                     />
 
                                     <button
@@ -1358,23 +1440,39 @@ function FeedPage() {
                 <FriendProfileModal userId={openProfileUserId} onClose={() => setOpenProfileUserId(null)} />
             )}
 
-            {composerOpen && (
-                <div className="modal-overlay" onClick={closeComposer}>
+            {composerOpen && composerView === "compose" && (
+                <div className="modal-overlay post-composer-overlay" onClick={closeComposer}>
                     <div className="modal-card post-composer-card" onClick={(event) => event.stopPropagation()}>
-                        <button
-                            className="modal-close"
-                            onClick={closeComposer}
-                            aria-label="Close"
-                        >
-                            ✕
-                        </button>
+                        <div className="post-composer-topbar">
+                            <button type="button" className="post-composer-cancel" onClick={closeComposer} aria-label="Close">
+                                ✕
+                            </button>
 
-                        <div className="post-composer-header">
-                            <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
-                            <strong>{editingPostId ? "Edit post" : myName || "You"}</strong>
+                            <strong>{editingPostId ? "Edit post" : "New post"}</strong>
+
+                            <span className="post-composer-topbar-spacer" />
                         </div>
 
-                        <form className="post-composer-form" onSubmit={handleSubmitPost}>
+                        <div className="post-composer-identity">
+                            <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
+                            <strong>{myName || "You"}</strong>
+                        </div>
+
+                        <div className="post-composer-pills">
+                            <button
+                                type="button"
+                                className="post-composer-pill"
+                                onClick={() => setComposerView("tagPeople")}
+                            >
+                                <PeopleIcon />
+                                {(() => {
+                                    const taggedCount = friends.filter(isFriendTagged).length;
+                                    return taggedCount > 0 ? `${taggedCount} tagged` : "Tag people";
+                                })()}
+                            </button>
+                        </div>
+
+                        <form id="post-composer-form" className="post-composer-form" onSubmit={handleSubmitPost}>
                             {shareTarget && (
                                 <div className="feed-share-preview">
                                     <span>Sharing {shareTarget.player_name}'s {shareTarget.item_type}</span>
@@ -1393,7 +1491,7 @@ function FeedPage() {
                                 </div>
                             )}
 
-                            <div className="feed-comment-input-wrap">
+                            <div className="feed-comment-input-wrap post-composer-input-wrap">
                                 <textarea
                                     className="settings-input post-composer-textarea"
                                     placeholder={`What's on your mind${myName ? `, ${myName}` : ""}?`}
@@ -1417,58 +1515,157 @@ function FeedPage() {
                                     </div>
                                 )}
                             </div>
+                        </form>
 
-                            <div className="post-composer-actions">
-                                <label className="composer-icon-button" aria-label="Add a photo">
-                                    {postPhotoUploading ? "..." : <ImageIcon />}
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        hidden
-                                        onChange={(event) =>
-                                            handlePostPhotoSelect(event.target.files?.[0])
-                                        }
-                                    />
-                                </label>
+                        <div className="post-composer-bottombar">
+                            <label className="composer-icon-button" aria-label="Add a photo">
+                                {postPhotoUploading ? "..." : <ImageIcon />}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    hidden
+                                    onChange={(event) =>
+                                        handlePostPhotoSelect(event.target.files?.[0])
+                                    }
+                                />
+                            </label>
 
-                                <span className="post-composer-hint">Type @ to tag a friend</span>
+                            <div className="feed-comment-emoji-wrap">
+                                <button
+                                    type="button"
+                                    className="composer-icon-button"
+                                    aria-label="Add an emoji"
+                                    onClick={() => toggleEmojiPicker(NEW_POST_KEY)}
+                                >
+                                    <SmileIcon />
+                                </button>
 
-                                <div className="feed-comment-emoji-wrap">
-                                    <button
-                                        type="button"
-                                        className="composer-icon-button"
-                                        aria-label="Add an emoji"
-                                        onClick={() => toggleEmojiPicker(NEW_POST_KEY)}
-                                    >
-                                        <SmileIcon />
-                                    </button>
-
-                                    {emojiPickerOpen === NEW_POST_KEY && (
-                                        <div className="emoji-picker">
-                                            {EMOJIS.map((emoji) => (
-                                                <button
-                                                    type="button"
-                                                    key={emoji}
-                                                    onClick={() => insertEmoji(NEW_POST_KEY, emoji)}
-                                                >
-                                                    {emoji}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
+                                {emojiPickerOpen === NEW_POST_KEY && (
+                                    <div className="emoji-picker">
+                                        {EMOJIS.map((emoji) => (
+                                            <button
+                                                type="button"
+                                                key={emoji}
+                                                onClick={() => insertEmoji(NEW_POST_KEY, emoji)}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <button
                                 className="sync-button post-composer-submit"
                                 type="submit"
+                                form="post-composer-form"
                                 disabled={posting.has(NEW_POST_KEY) || postPhotoUploading}
                             >
                                 {posting.has(NEW_POST_KEY)
                                     ? editingPostId ? "Saving..." : "Posting..."
                                     : editingPostId ? "Save" : "Post"}
                             </button>
-                        </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {composerOpen && composerView === "tagPeople" && (
+                <div className="modal-overlay post-composer-overlay" onClick={() => setComposerView("compose")}>
+                    <div className="modal-card post-composer-card" onClick={(event) => event.stopPropagation()}>
+                        <div className="post-composer-topbar">
+                            <button
+                                type="button"
+                                className="post-composer-cancel"
+                                onClick={() => setComposerView("compose")}
+                                aria-label="Back"
+                            >
+                                ✕
+                            </button>
+
+                            <strong>Tag people</strong>
+
+                            <button
+                                type="button"
+                                className="post-composer-cancel post-composer-done"
+                                onClick={() => setComposerView("compose")}
+                            >
+                                Done
+                            </button>
+                        </div>
+
+                        <div className="post-composer-tag-search">
+                            <input
+                                className="settings-input"
+                                placeholder="Who are you with?"
+                                value={tagSearch}
+                                onChange={(event) => setTagSearch(event.target.value)}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="post-composer-tag-list">
+                            {friends
+                                .filter((friend) =>
+                                    friend.display_name.toLowerCase().includes(tagSearch.toLowerCase())
+                                )
+                                .map((friend) => (
+                                    <button
+                                        type="button"
+                                        key={friend.user_id}
+                                        className="post-composer-tag-row"
+                                        onClick={() => toggleTagFriend(friend)}
+                                    >
+                                        <Avatar name={friend.display_name} avatarUrl={friend.avatar_url} small />
+                                        <span>{friend.display_name}</span>
+                                        <span
+                                            className={`post-composer-tag-check${
+                                                isFriendTagged(friend) ? " checked" : ""
+                                            }`}
+                                        />
+                                    </button>
+                                ))}
+
+                            {friends.length === 0 && (
+                                <p className="course-count" style={{ padding: 16 }}>
+                                    Add some friends first to tag them in a post.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {reactionDetailsKey && (
+                <div className="modal-overlay" onClick={() => setReactionDetailsKey(null)}>
+                    <div className="modal-card reaction-details-card" onClick={(event) => event.stopPropagation()}>
+                        <button
+                            className="modal-close"
+                            onClick={() => setReactionDetailsKey(null)}
+                            aria-label="Close"
+                        >
+                            ✕
+                        </button>
+
+                        <h3 className="reaction-details-title">Reactions</h3>
+
+                        {reactionDetailsLoading ? (
+                            <p className="course-count">Loading...</p>
+                        ) : reactionDetails.length === 0 ? (
+                            <p className="course-count">No reactions yet.</p>
+                        ) : (
+                            <div className="reaction-details-list">
+                                {reactionDetails.map((detail) => (
+                                    <div className="reaction-details-row" key={detail.user_id}>
+                                        <Avatar name={detail.display_name} avatarUrl={detail.avatar_url} small />
+                                        <span>{detail.display_name}</span>
+                                        <span className="reaction-details-emoji">
+                                            {REACTION_EMOJI[detail.reaction]}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
