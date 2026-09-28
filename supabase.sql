@@ -572,3 +572,10 @@ alter table if exists public.handicap_scores add column if not exists hidden_fro
 -- trigger an automated summary (the daily leaderboard, tournament results)
 -- where the real author is incidental, not the point of the post.
 alter table if exists public.posts add column if not exists is_system_generated boolean not null default false;
+
+-- Friends list used to recompute each friend's most-played ("home") course
+-- by fetching and aggregating their ENTIRE handicap_scores history on every
+-- page load -- expensive for anyone with hundreds of rounds, and the exact
+-- same result every time between syncs. Computed once per sync instead and
+-- cached here.
+alter table if exists public.handicap_sync_state add column if not exists home_course_id bigint references public.courses(id);

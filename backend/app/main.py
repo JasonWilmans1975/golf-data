@@ -41,7 +41,9 @@ from .teesheet import (
 from .friends import (
     get_profile,
     update_profile,
+    search_users,
     send_friend_request,
+    send_friend_request_by_id,
     list_incoming_requests,
     list_sent_requests,
     cancel_sent_request,
@@ -598,6 +600,23 @@ class FriendRequestBody(BaseModel):
 def friends_send_request(body: FriendRequestBody, user_id: str = Depends(get_current_user_id)):
     try:
         return send_friend_request(user_id, body.email)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
+
+
+@app.get("/friends/search")
+def friends_search(q: str, user_id: str = Depends(get_current_user_id)):
+    return search_users(user_id, q)
+
+
+class FriendRequestByIdBody(BaseModel):
+    user_id: str
+
+
+@app.post("/friends/requests/by-id")
+def friends_send_request_by_id(body: FriendRequestByIdBody, user_id: str = Depends(get_current_user_id)):
+    try:
+        return send_friend_request_by_id(user_id, body.user_id)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
 

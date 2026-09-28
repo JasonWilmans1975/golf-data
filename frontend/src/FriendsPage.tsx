@@ -1,9 +1,17 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API, authFetch } from "./api";
 import { supabase } from "./supabaseClient";
 import AppNav from "./AppNav";
 import BrandLogo from "./BrandLogo";
+import { Avatar } from "./FriendProfileModal";
+
+type SearchResult = {
+    user_id: string;
+    display_name: string;
+    avatar_url: string | null;
+    relationship: "none" | "pending_sent" | "pending_received" | "friends";
+};
 
 type Friend = {
     user_id: string;
@@ -61,8 +69,10 @@ function FriendsPage() {
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const [email, setEmail] = useState("");
-    const [sending, setSending] = useState(false);
+    const [query, setQuery] = useState("");
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [sendingTo, setSendingTo] = useState<string | null>(null);
     const [sendError, setSendError] = useState<string | null>(null);
     const [sendMessage, setSendMessage] = useState<string | null>(null);
 
@@ -107,17 +117,40 @@ function FriendsPage() {
         };
     }, []);
 
-    async function handleSendRequest(event: FormEvent) {
-        event.preventDefault();
-        setSending(true);
+    useEffect(() => {
+        const trimmed = query.trim();
+
+        if (trimmed.length < 2) {
+            setSearchResults([]);
+            setSearching(false);
+            return;
+        }
+
+        setSearching(true);
+        const timeout = setTimeout(async () => {
+            try {
+                const response = await authFetch(`${API}/friends/search?q=${encodeURIComponent(trimmed)}`);
+                if (response.ok) setSearchResults(await response.json());
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setSearching(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(timeout);
+    }, [query]);
+
+    async function handleSendRequest(targetUserId: string) {
+        setSendingTo(targetUserId);
         setSendError(null);
         setSendMessage(null);
 
         try {
-            const response = await authFetch(`${API}/friends/requests`, {
+            const response = await authFetch(`${API}/friends/requests/by-id`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ user_id: targetUserId }),
             });
 
             const body = await response.json().catch(() => null);
@@ -130,14 +163,20 @@ function FriendsPage() {
                         ? "You're now friends!"
                         : "Friend request sent."
                 );
-                setEmail("");
+                setSearchResults((prev) =>
+                    prev.map((result) =>
+                        result.user_id === targetUserId
+                            ? { ...result, relationship: body?.status === "accepted" ? "friends" : "pending_sent" }
+                            : result
+                    )
+                );
                 await loadData();
             }
         } catch (error) {
             console.error(error);
             setSendError("Could not reach the backend");
         } finally {
-            setSending(false);
+            setSendingTo(null);
         }
     }
 
@@ -194,35 +233,61 @@ function FriendsPage() {
                     <div className="chart-heading">
                         <div>
                             <p className="eyebrow">ADD A FRIEND</p>
-                            <h3>Send a friend request</h3>
+                            <h3>Find someone on GolfCircle</h3>
                         </div>
                     </div>
 
-                    <form onSubmit={handleSendRequest}>
-                        <label className="settings-label">
-                            Their email address
-                            <input
-                                className="settings-input"
-                                type="email"
-                                value={email}
-                                onChange={(event) => setEmail(event.target.value)}
-                                placeholder="friend@example.com"
-                                required
-                            />
-                        </label>
+                    <label className="settings-label">
+                        Search by name or email
+                        <input
+                            className="settings-input"
+                            type="text"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Start typing a name or email..."
+                        />
+                    </label>
 
-                        {sendError && <p className="auth-error">{sendError}</p>}
-                        {sendMessage && <p className="course-count">{sendMessage}</p>}
+                    {sendError && <p className="auth-error">{sendError}</p>}
+                    {sendMessage && <p className="course-count">{sendMessage}</p>}
 
-                        <button
-                            className="sync-button"
-                            type="submit"
-                            disabled={sending}
-                            style={{ marginTop: 12 }}
-                        >
-                            {sending ? "Sending..." : "Send request"}
-                        </button>
-                    </form>
+                    {searching && <p className="course-count" style={{ marginTop: 8 }}>Searching...</p>}
+
+                    {!searching && query.trim().length >= 2 && searchResults.length === 0 && (
+                        <p className="course-count" style={{ marginTop: 8 }}>No one found.</p>
+                    )}
+
+                    {searchResults.length > 0 && (
+                        <div className="round-list" style={{ marginTop: 12 }}>
+                            {searchResults.map((result) => (
+                                <div className="round-row" key={result.user_id}>
+                                    <div className="friend-search-result">
+                                        <Avatar name={result.display_name} avatarUrl={result.avatar_url} small />
+                                        <strong>{result.display_name}</strong>
+                                    </div>
+
+                                    {result.relationship === "friends" && (
+                                        <span className="course-count">Already friends</span>
+                                    )}
+                                    {result.relationship === "pending_sent" && (
+                                        <span className="course-count">Request sent</span>
+                                    )}
+                                    {result.relationship === "pending_received" && (
+                                        <span className="course-count">Sent you a request — see below</span>
+                                    )}
+                                    {result.relationship === "none" && (
+                                        <button
+                                            className="sync-button"
+                                            onClick={() => handleSendRequest(result.user_id)}
+                                            disabled={sendingTo === result.user_id}
+                                        >
+                                            {sendingTo === result.user_id ? "Sending..." : "Add"}
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </section>
 
                 {requests.length > 0 && (

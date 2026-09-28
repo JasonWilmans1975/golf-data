@@ -246,11 +246,35 @@ def _known_score_ids(user_id: str) -> set[int]:
     return {row["score_id"] for row in rows}
 
 
-def _mark_synced_now(user_id: str, current_index):
+def _compute_home_course_id(user_id: str) -> int | None:
+    """Most-played course, i.e. "home" course -- computed once per sync
+    instead of live on every friends-list read, since it only ever changes
+    when new rounds come in."""
+    scores = fetch_all(
+        lambda: supabase
+        .table("handicap_scores")
+        .select("course_id")
+        .eq("user_id", user_id)
+        .not_.is_("course_id", "null")
+        .order("id")
+    )
+
+    if not scores:
+        return None
+
+    counts: dict[int, int] = {}
+    for row in scores:
+        counts[row["course_id"]] = counts.get(row["course_id"], 0) + 1
+
+    return max(counts, key=counts.get)
+
+
+def _mark_synced_now(user_id: str, current_index, home_course_id: int | None = None):
     supabase.table("handicap_sync_state").upsert({
         "user_id": user_id,
         "last_synced_at": datetime.now(timezone.utc).isoformat(),
         "current_handicap_index": current_index,
+        "home_course_id": home_course_id,
     }).execute()
 
 
@@ -346,7 +370,7 @@ def _finish_sync(user_id: str, data: dict, is_first_sync: bool) -> dict:
 
     course_match = match_handicap_scores_to_courses(user_id)
 
-    _mark_synced_now(user_id, data["current_index"])
+    _mark_synced_now(user_id, data["current_index"], _compute_home_course_id(user_id))
 
     if rows:
         if is_first_sync:

@@ -1,3 +1,4 @@
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -96,18 +97,62 @@ def _find_relationship(user_id: str, other_user_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def send_friend_request(user_id: str, email: str) -> dict:
-    email = email.strip().lower()
+def search_users(user_id: str, query: str, limit: int = 20) -> list[dict]:
+    """Powers add-a-friend search -- anyone signed up should be findable by
+    name/nickname/email, not just by typing their exact email address."""
+    # Commas/parens would corrupt the .or_() filter string below (postgrest
+    # reads them as filter separators), and neither is meaningful in a
+    # person's name/email anyway.
+    query = re.sub(r"[,()]", "", query).strip()
 
-    profile_response = (
-        supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference,avatar_url").ilike("email", email).limit(1).execute()
+    if len(query) < 2:
+        return []
+
+    pattern = f"%{query}%"
+
+    response = (
+        supabase
+        .table("profiles")
+        .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
+        .neq("user_id", user_id)
+        .or_(f"display_name.ilike.{pattern},nickname.ilike.{pattern},surname.ilike.{pattern},email.ilike.{pattern}")
+        .limit(limit)
+        .execute()
+    )
+    rows = response.data or []
+
+    if not rows:
+        return []
+
+    relationships_response = (
+        supabase
+        .table("friend_requests")
+        .select("from_user_id,to_user_id,status")
+        .or_(f"from_user_id.eq.{user_id},to_user_id.eq.{user_id}")
+        .execute()
     )
 
-    if not profile_response.data:
-        raise ValueError("No Golf Journey account found for that email")
+    status_by_other: dict[str, str] = {}
+    for rel in relationships_response.data or []:
+        other = rel["to_user_id"] if rel["from_user_id"] == user_id else rel["from_user_id"]
 
-    target_id = profile_response.data[0]["user_id"]
+        if rel["status"] == "accepted":
+            status_by_other[other] = "friends"
+        elif rel["status"] == "pending":
+            status_by_other[other] = "pending_sent" if rel["from_user_id"] == user_id else "pending_received"
 
+    return [
+        {
+            "user_id": row["user_id"],
+            "display_name": _display_name(row),
+            "avatar_url": _avatar_url(row),
+            "relationship": status_by_other.get(row["user_id"], "none"),
+        }
+        for row in rows
+    ]
+
+
+def _send_friend_request_to(user_id: str, target_id: str) -> dict:
     if target_id == user_id:
         raise ValueError("You can't add yourself as a friend")
 
@@ -143,6 +188,23 @@ def send_friend_request(user_id: str, email: str) -> dict:
     }).execute()
 
     return {"status": "pending"}
+
+
+def send_friend_request(user_id: str, email: str) -> dict:
+    email = email.strip().lower()
+
+    profile_response = (
+        supabase.table("profiles").select("user_id").ilike("email", email).limit(1).execute()
+    )
+
+    if not profile_response.data:
+        raise ValueError("No Golf Journey account found for that email")
+
+    return _send_friend_request_to(user_id, profile_response.data[0]["user_id"])
+
+
+def send_friend_request_by_id(user_id: str, target_id: str) -> dict:
+    return _send_friend_request_to(user_id, target_id)
 
 
 def list_incoming_requests(user_id: str) -> list[dict]:
@@ -286,25 +348,18 @@ def _current_handicaps(friend_ids: list[str]) -> dict[str, float | None]:
 
 
 def _home_courses(friend_ids: list[str]) -> dict[str, str | None]:
-    scores = fetch_all(
-        lambda: supabase
-        .table("handicap_scores")
-        .select("user_id,course_id")
+    # home_course_id is computed once per handicap sync (see
+    # handicap.py::_compute_home_course_id) rather than re-aggregated from
+    # full score history on every friends-list read.
+    state_response = (
+        supabase
+        .table("handicap_sync_state")
+        .select("user_id,home_course_id")
         .in_("user_id", friend_ids)
-        .not_.is_("course_id", "null")
-        .order("id")
+        .not_.is_("home_course_id", "null")
+        .execute()
     )
-
-    counts_by_user: dict[str, dict[int, int]] = {}
-
-    for row in scores:
-        course_counts = counts_by_user.setdefault(row["user_id"], {})
-        course_counts[row["course_id"]] = course_counts.get(row["course_id"], 0) + 1
-
-    top_course_id_by_user = {
-        user_id: max(course_counts, key=course_counts.get)
-        for user_id, course_counts in counts_by_user.items()
-    }
+    top_course_id_by_user = {row["user_id"]: row["home_course_id"] for row in state_response.data or []}
 
     course_ids = list(set(top_course_id_by_user.values()))
     course_name_by_id = {}
