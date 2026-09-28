@@ -223,13 +223,21 @@ def _to_float(value):
 
 
 def _already_synced_today(user_id: str) -> bool:
-    state = (
-        supabase
-        .table("handicap_sync_state")
-        .select("last_synced_at")
-        .eq("user_id", user_id)
-        .execute()
-    )
+    # This is only ever an optimization (skip a sync that already happened
+    # today) -- if the check itself fails (seen in production: a transient
+    # "Route not found" from PostgREST), failing open and syncing anyway is
+    # always safe, whereas letting it crash the whole request isn't.
+    try:
+        state = (
+            supabase
+            .table("handicap_sync_state")
+            .select("last_synced_at")
+            .eq("user_id", user_id)
+            .execute()
+        )
+    except Exception:
+        logger.exception("Could not check last sync time for user %s -- syncing anyway", user_id)
+        return False
 
     if not state.data or not state.data[0]["last_synced_at"]:
         return False
