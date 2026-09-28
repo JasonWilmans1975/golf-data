@@ -222,7 +222,8 @@ function Dashboard() {
                 const token = data.session?.access_token;
 
                 if (token) {
-                    window.location.href = `${API}/auth/strava?token=${encodeURIComponent(token)}`;
+                    const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
+                    window.location.href = `${API}/auth/strava?token=${encodeURIComponent(token)}&redirect_to=${encodeURIComponent(redirectTo)}`;
                 }
 
                 return;
@@ -259,7 +260,7 @@ function Dashboard() {
         loadDashboard();
 
         if (new URLSearchParams(window.location.search).get("connected") === "1") {
-            window.history.replaceState(null, "", "/rounds");
+            window.history.replaceState(null, "", `${import.meta.env.BASE_URL}rounds`);
             handleSync();
         }
     }, []);
