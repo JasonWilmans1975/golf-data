@@ -198,7 +198,8 @@ function StatsPage() {
                 year,
                 rounds,
             }))
-            .sort((a, b) => Number(b.year) - Number(a.year));
+            .sort((a, b) => Number(b.year) - Number(a.year))
+            .slice(0, 16);
     }, [allScores]);
 
     const totalDistance = activities.reduce(
