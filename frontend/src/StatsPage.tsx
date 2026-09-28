@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    BarChart,
-    Bar,
     LineChart,
     Line,
     XAxis,
@@ -408,7 +406,7 @@ function StatsPage() {
                         </div>
                     )}
 
-                    <div className="chart-card">
+                    <div className="chart-card chart-card-wide">
                         <div className="chart-heading">
                             <div>
                                 <p className="eyebrow">ACTIVITY</p>
@@ -416,23 +414,15 @@ function StatsPage() {
                             </div>
                         </div>
 
-                        <div className="chart-container">
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={roundsByYear}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
-                                    <XAxis dataKey="year" tick={chart.tick} />
-                                    <YAxis allowDecimals={false} tick={chart.tick} />
-                                    <Tooltip contentStyle={chart.tooltipStyle} labelStyle={chart.tooltipLabelStyle} />
-                                    <Bar
-                                        dataKey="rounds"
-                                        fill="#3b82f6"
-                                        radius={[2, 2, 0, 0]}
-                                    />
-                                </BarChart>
-                            </ResponsiveContainer>
+                        <div className="stats-grid" style={{ marginTop: 0 }}>
+                            {roundsByYear.map((row) => (
+                                <div className="stat-card" key={row.year}>
+                                    <span>{row.year}</span>
+                                    <strong>{row.rounds}</strong>
+                                </div>
+                            ))}
                         </div>
                     </div>
-
                 </section>
 
                 {handicapConnected && (
