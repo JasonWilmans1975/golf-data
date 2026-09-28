@@ -25,6 +25,24 @@ def _avatar_url(profile: dict | None) -> str | None:
     return profile.get("avatar_url") if profile else None
 
 
+def _post_became_friends(user_id: str, other_user_id: str) -> None:
+    """Posted under the person taking the accepting action right now (same
+    convention as tournament-joined posts) -- not is_system_generated, since
+    becoming friends is a real decision by a real person, not an automated
+    summary."""
+    other_profile_response = (
+        supabase
+        .table("profiles")
+        .select("display_name,email,surname,nickname,display_preference")
+        .eq("user_id", other_user_id)
+        .limit(1)
+        .execute()
+    )
+    other_profile = other_profile_response.data[0] if other_profile_response.data else None
+
+    create_post(user_id, f"🤝 became friends with {_display_name(other_profile)}!")
+
+
 SYSTEM_POSTER_NAME = "GolfCircle"
 
 
@@ -167,6 +185,7 @@ def _send_friend_request_to(user_id: str, target_id: str) -> dict:
             supabase.table("friend_requests").update(
                 {"status": "accepted", "updated_at": _now()}
             ).eq("id", existing["id"]).execute()
+            _post_became_friends(user_id, target_id)
             return {"status": "accepted"}
 
         if existing["from_user_id"] == user_id and existing["status"] == "pending":
@@ -309,6 +328,9 @@ def respond_to_request(user_id: str, request_id: int, accept: bool) -> dict:
 
     status = "accepted" if accept else "declined"
     supabase.table("friend_requests").update({"status": status, "updated_at": _now()}).eq("id", request_id).execute()
+
+    if accept:
+        _post_became_friends(user_id, row["from_user_id"])
 
     return {"status": status}
 
