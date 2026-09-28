@@ -203,16 +203,6 @@ function StatsPage() {
             .sort((a, b) => Number(a.year) - Number(b.year));
     }, [allScores]);
 
-    const topCourses = useMemo(() => {
-        return [...courses]
-            .sort((a, b) => b.rounds_played - a.rounds_played)
-            .slice(0, 10)
-            .map((course) => ({
-                name: course.name,
-                rounds: course.rounds_played,
-            }));
-    }, [courses]);
-
     const totalDistance = activities.reduce(
         (sum, activity) => sum + (activity.distance_m || 0),
         0
@@ -443,52 +433,6 @@ function StatsPage() {
                         </div>
                     </div>
 
-                    <div className="chart-card">
-                        <div className="chart-heading">
-                            <div>
-                                <p className="eyebrow">COURSES</p>
-                                <h3>Most played courses</h3>
-                            </div>
-                        </div>
-
-                        <div className="chart-container">
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart
-                                    data={topCourses}
-                                    layout="vertical"
-                                    margin={{
-                                        left: 30,
-                                        right: 20,
-                                    }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} horizontal={false} />
-                                    <XAxis type="number" allowDecimals={false} tick={chart.tick} />
-                                    <YAxis
-                                        type="category"
-                                        dataKey="name"
-                                        width={130}
-                                        tick={chart.tick}
-                                    />
-                                    <Tooltip contentStyle={chart.tooltipStyle} labelStyle={chart.tooltipLabelStyle} />
-                                    <Bar
-                                        dataKey="rounds"
-                                        fill="#22c55e"
-                                        radius={[0, 2, 2, 0]}
-                                    />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                </section>
-
-                <section className="stats-summary">
-                    <div>
-                        <span>Most played course</span>
-                        <strong>
-                            {topCourses.length > 0 ? topCourses[0].name : "—"}
-                        </strong>
-                    </div>
                 </section>
 
                 {handicapConnected && (
