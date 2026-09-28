@@ -82,6 +82,27 @@ credentials so the nav updates without a reload.
   password (not other errors), cleared on next successful login. The
   nightly batch skips accounts with this set, to avoid hammering
   handicaps.co.za with known-bad logins.
+- **`handicap_sync_state.home_course_id`** — each friend's most-played
+  course, computed once per handicap sync (`_compute_home_course_id`) and
+  cached rather than re-aggregated from full score history on every
+  Friends-page load (that used to be the page's whole load-time cost).
+
+## PWA (`vite-plugin-pwa`)
+
+The app is installable (manifest + generated service worker). The service
+worker (`globPatterns` in `vite.config.ts`) only precaches this build's own
+static assets — it never touches `api.slogs.co.za`, so nothing about
+rounds/friends/feed data is ever served from a cache. Keep it that way; if
+someone asks for offline data access later, that needs an explicit,
+deliberate runtime-caching rule, not a default. `frontend/public/.htaccess`
+no-caches `sw.js`/`manifest.webmanifest` for the same reason it already
+no-caches `index.html` — otherwise a long-cached `sw.js` means the PWA's
+own update mechanism never runs. Icons live at `frontend/public/icon-*.png`
+and `apple-touch-icon.png`, rendered from `favicon.svg` via ImageMagick
+(`magick -background ... favicon.svg -resize ...`) — regenerate the same
+way if the logo ever changes, and `chmod 644` the output (new files in
+`public/` can land at `600` on this machine, which silently breaks them
+after cPanel extraction).
 
 ## Schema
 
