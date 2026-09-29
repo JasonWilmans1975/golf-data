@@ -637,3 +637,16 @@ create index if not exists feed_comments_parent_idx on public.feed_comments(pare
 -- rounds already use for their course chip.
 alter table if exists public.posts add column if not exists course_id bigint references public.courses(id);
 create index if not exists posts_course_id_idx on public.posts(course_id);
+
+-- Multi-photo posts. A join table rather than a photo_urls array -- photo
+-- order matters for the gallery/lightbox and this leaves room for later
+-- per-photo metadata (captions) without another migration. posts.photo_url
+-- stays as a deprecated back-compat column, always mirroring photo 0.
+create table if not exists public.post_photos (
+  id bigint generated always as identity primary key,
+  post_id bigint not null references public.posts(id) on delete cascade,
+  photo_url text not null,
+  position integer not null default 0,
+  created_at timestamptz default now()
+);
+create index if not exists post_photos_post_id_idx on public.post_photos(post_id, position);

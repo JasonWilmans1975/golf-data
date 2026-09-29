@@ -751,6 +751,7 @@ class PostBody(BaseModel):
     shared_item_type: str | None = None
     shared_item_id: int | None = None
     photo_url: str | None = None
+    photo_urls: list[str] = []
     mentioned_user_ids: list[str] = []
     course_id: int | None = None
 
@@ -766,6 +767,7 @@ def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)
             body.photo_url,
             mentioned_user_ids=body.mentioned_user_ids,
             course_id=body.course_id,
+            photo_urls=body.photo_urls,
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
@@ -774,6 +776,7 @@ def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)
 class PostEditBody(BaseModel):
     body: str = ""
     photo_url: str | None = None
+    photo_urls: list[str] = []
     mentioned_user_ids: list[str] = []
     course_id: int | None = None
 
@@ -782,7 +785,13 @@ class PostEditBody(BaseModel):
 def feed_update_post(post_id: int, body: PostEditBody, user_id: str = Depends(get_current_user_id)):
     try:
         return update_post(
-            user_id, post_id, body.body, body.photo_url, body.mentioned_user_ids, body.course_id
+            user_id,
+            post_id,
+            body.body,
+            body.photo_url,
+            body.mentioned_user_ids,
+            body.course_id,
+            photo_urls=body.photo_urls,
         )
     except ValueError as exc:
         raise HTTPException(404 if str(exc) == "Post not found" else 400, detail=str(exc))

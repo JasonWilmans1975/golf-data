@@ -854,6 +854,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             "posted_at": score["play_date"],
             "body": None,
             "photo_url": None,
+            "photo_urls": [],
             "course_name": course.get("name") or score.get("course_name"),
             "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
             "course_phone": course.get("phone_number"),
@@ -894,6 +895,10 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             if course_response.data:
                 course = course_response.data[0]
 
+        photo_urls = _photos_by_post_id([post["id"]]).get(post["id"]) or (
+            [post["photo_url"]] if post.get("photo_url") else []
+        )
+
         return {
             "item_type": "post",
             "item_id": post["id"],
@@ -903,6 +908,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             "posted_at": post["created_at"],
             "body": post["body"],
             "photo_url": post.get("photo_url"),
+            "photo_urls": photo_urls,
             "course_name": course.get("name"),
             "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
             "course_phone": course.get("phone_number"),
@@ -1042,16 +1048,22 @@ def create_post(
     is_system_generated: bool = False,
     mentioned_user_ids: list[str] | None = None,
     course_id: int | None = None,
+    photo_urls: list[str] | None = None,
 ) -> dict:
     """user_id still owns the post for visibility/permission purposes (whose
     circle sees it, who can comment) -- is_system_generated only changes how
     the Feed *displays* it, showing "GolfCircle" instead of whoever's sync
     happened to trigger an automated post (a milestone, the daily
     leaderboard, a tournament announcement). See get_activity_feed_with_
-    comments and _snapshot_item for where that display override happens."""
-    body = body.strip()
+    comments and _snapshot_item for where that display override happens.
 
-    if not body and not photo_url and not (shared_item_type and shared_item_id):
+    photo_urls (post_photos, ordered) is the current multi-photo path;
+    photo_url stays populated as post_photos[0] for any old client/query
+    still reading the singular column."""
+    body = body.strip()
+    primary_photo_url = photo_urls[0] if photo_urls else photo_url
+
+    if not body and not primary_photo_url and not (shared_item_type and shared_item_id):
         raise ValueError("Post can't be empty")
 
     if len(body) > 2000:
@@ -1060,7 +1072,7 @@ def create_post(
     row = {
         "user_id": user_id,
         "body": body,
-        "photo_url": photo_url,
+        "photo_url": primary_photo_url,
         "is_system_generated": is_system_generated,
         "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
         "course_id": _validate_course_id(course_id),
@@ -1078,9 +1090,47 @@ def create_post(
         row["shared_item_type"] = shared_item_type
         row["shared_item_id"] = shared_item_id
 
-    response = supabase.table("posts").insert(row).execute()
+    post = supabase.table("posts").insert(row).execute().data[0]
+    post["photo_urls"] = _replace_post_photos(post["id"], photo_urls)
 
-    return response.data[0]
+    return post
+
+
+def _photos_by_post_id(post_ids: list[int]) -> dict[int, list[str]]:
+    if not post_ids:
+        return {}
+
+    response = (
+        supabase
+        .table("post_photos")
+        .select("post_id,photo_url,position")
+        .in_("post_id", post_ids)
+        .order("position")
+        .execute()
+    )
+
+    grouped: dict[int, list[str]] = {}
+    for row in response.data or []:
+        grouped.setdefault(row["post_id"], []).append(row["photo_url"])
+
+    return grouped
+
+
+def _replace_post_photos(post_id: int, photo_urls: list[str] | None) -> list[str]:
+    """Full replace rather than a diff -- same precedent as
+    auto_friend_teesheet_buddies' buddy-list sync, fine for a handful of
+    rows with no per-photo state worth preserving across an edit."""
+    supabase.table("post_photos").delete().eq("post_id", post_id).execute()
+
+    if not photo_urls:
+        return []
+
+    supabase.table("post_photos").insert([
+        {"post_id": post_id, "photo_url": url, "position": index}
+        for index, url in enumerate(photo_urls)
+    ]).execute()
+
+    return photo_urls
 
 
 def update_post(
@@ -1090,6 +1140,7 @@ def update_post(
     photo_url: str | None,
     mentioned_user_ids: list[str] | None = None,
     course_id: int | None = None,
+    photo_urls: list[str] | None = None,
 ) -> dict:
     existing = supabase.table("posts").select("id,user_id").eq("id", post_id).limit(1).execute()
 
@@ -1100,28 +1151,31 @@ def update_post(
         raise ValueError("Post not found")
 
     body = body.strip()
+    primary_photo_url = photo_urls[0] if photo_urls else photo_url
 
-    if not body and not photo_url:
+    if not body and not primary_photo_url:
         raise ValueError("Post can't be empty")
 
     if len(body) > 2000:
         raise ValueError("Post is too long")
 
-    response = (
+    post = (
         supabase
         .table("posts")
         .update({
             "body": body,
-            "photo_url": photo_url,
+            "photo_url": primary_photo_url,
             "edited_at": _now(),
             "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
             "course_id": _validate_course_id(course_id),
         })
         .eq("id", post_id)
         .execute()
+        .data[0]
     )
+    post["photo_urls"] = _replace_post_photos(post_id, photo_urls)
 
-    return response.data[0]
+    return post
 
 
 def delete_post(user_id: str, post_id: int) -> None:
@@ -1439,6 +1493,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         for entry in page
         if entry["raw"].get("course_id")
     })
+    post_ids = [entry["item_id"] for entry in page if entry["item_type"] == "post"]
 
     def _fetch_profiles():
         response = supabase.table("profiles").select("user_id,display_name,email,surname,nickname,display_preference,avatar_url").in_("user_id", user_ids).execute()
@@ -1456,16 +1511,21 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         )
         return {row["id"]: row for row in response.data or []}
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    def _fetch_post_photos():
+        return _photos_by_post_id(post_ids)
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
         profiles_future = pool.submit(_fetch_profiles)
         courses_future = pool.submit(_fetch_courses)
         reactions_future = pool.submit(_reaction_summary, user_id, pairs)
         comments_future = pool.submit(_fetch_comments_for_pairs, user_id, pairs)
+        photos_future = pool.submit(_fetch_post_photos)
 
         profile_by_user = profiles_future.result()
         course_by_id = courses_future.result()
         reactions_by_item = reactions_future.result()
         comments_by_key = comments_future.result()
+        photos_by_post_id = photos_future.result()
 
     _attach_recent_reactor_names(user_id, reactions_by_item, profile_by_user)
 
@@ -1489,6 +1549,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "posted_at": raw["play_date"],
                 "body": None,
                 "photo_url": None,
+                "photo_urls": [],
                 "shared_item": None,
                 "adjusted_gross": raw.get("adjusted_gross"),
                 "stableford_points": raw.get("stableford_points"),
@@ -1520,6 +1581,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "posted_at": raw["created_at"],
                 "body": raw["body"],
                 "photo_url": raw.get("photo_url"),
+                "photo_urls": photos_by_post_id.get(item_id) or ([raw["photo_url"]] if raw.get("photo_url") else []),
                 "shared_item": shared_item,
                 "adjusted_gross": None,
                 "stableford_points": None,

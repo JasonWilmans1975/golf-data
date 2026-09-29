@@ -31,6 +31,7 @@ type SharedItem = {
     posted_at: string;
     body: string | null;
     photo_url: string | null;
+    photo_urls: string[];
     course_name: string | null;
     course_photo_url: string | null;
     course_phone: string | null;
@@ -47,6 +48,7 @@ type FeedItem = {
     posted_at: string;
     body: string | null;
     photo_url: string | null;
+    photo_urls: string[];
     shared_item: SharedItem | null;
     adjusted_gross: number | null;
     stableford_points: number | null;
@@ -498,6 +500,94 @@ function PostReactionBar({
     );
 }
 
+// 1 photo -- today's single full-width image. 2+ -- a small grid (up to 4
+// tiles, "+N" overlay on the last one if there are more), any tile opening
+// the full-screen Lightbox at that photo's index.
+function PhotoGallery({ photos, onOpen }: { photos: string[]; onOpen: (index: number) => void }) {
+    if (photos.length === 0) return null;
+
+    if (photos.length === 1) {
+        return (
+            <button type="button" className="feed-card-photo-button" onClick={() => onOpen(0)}>
+                <img src={photos[0]} alt="" className="feed-card-photo" />
+            </button>
+        );
+    }
+
+    const visible = photos.slice(0, 4);
+    const remaining = photos.length - visible.length;
+
+    return (
+        <div className={`feed-photo-grid feed-photo-grid-${visible.length}`}>
+            {visible.map((url, index) => (
+                <button type="button" key={url} className="feed-photo-grid-tile" onClick={() => onOpen(index)}>
+                    <img src={url} alt="" />
+                    {index === visible.length - 1 && remaining > 0 && (
+                        <span className="feed-photo-grid-more">+{remaining}</span>
+                    )}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function Lightbox({
+    photos,
+    index,
+    onClose,
+    onPrev,
+    onNext,
+}: {
+    photos: string[];
+    index: number;
+    onClose: () => void;
+    onPrev: () => void;
+    onNext: () => void;
+}) {
+    return (
+        <div className="modal-overlay lightbox-overlay" onClick={onClose}>
+            <button type="button" className="lightbox-close" onClick={onClose} aria-label="Close">
+                ✕
+            </button>
+
+            {photos.length > 1 && (
+                <button
+                    type="button"
+                    className="lightbox-nav lightbox-prev"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onPrev();
+                    }}
+                    aria-label="Previous photo"
+                >
+                    ‹
+                </button>
+            )}
+
+            <img
+                src={photos[index]}
+                alt=""
+                className="lightbox-image"
+                onClick={(event) => event.stopPropagation()}
+            />
+
+            {photos.length > 1 && (
+                <button
+                    type="button"
+                    className="lightbox-nav lightbox-next"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onNext();
+                    }}
+                    aria-label="Next photo"
+                >
+                    ›
+                </button>
+            )}
+        </div>
+    );
+}
+
 function CommentComposer({
     itemType,
     itemId,
@@ -619,8 +709,9 @@ function FeedPage() {
     const [shareMenuOpen, setShareMenuOpen] = useState<string | null>(null);
     const [shareTarget, setShareTarget] = useState<FeedItem | null>(null);
     const [activeReplyCommentId, setActiveReplyCommentId] = useState<number | null>(null);
+    const [lightbox, setLightbox] = useState<{ photos: string[]; index: number } | null>(null);
 
-    const [postPhotoUrl, setPostPhotoUrl] = useState<string | null>(null);
+    const [postPhotoUrls, setPostPhotoUrls] = useState<string[]>([]);
     const [postPhotoUploading, setPostPhotoUploading] = useState(false);
     const [composerOpen, setComposerOpen] = useState(false);
     const [editingPostId, setEditingPostId] = useState<number | null>(null);
@@ -1066,6 +1157,24 @@ function FeedPage() {
         }
     }
 
+    function openLightbox(photos: string[], index: number) {
+        setLightbox({ photos, index });
+    }
+
+    function closeLightbox() {
+        setLightbox(null);
+    }
+
+    function lightboxPrev() {
+        setLightbox((prev) =>
+            prev ? { ...prev, index: (prev.index - 1 + prev.photos.length) % prev.photos.length } : prev
+        );
+    }
+
+    function lightboxNext() {
+        setLightbox((prev) => (prev ? { ...prev, index: (prev.index + 1) % prev.photos.length } : prev));
+    }
+
     async function react(itemType: string, itemId: number, reaction: string) {
         setReactionPickerOpen(null);
 
@@ -1119,14 +1228,19 @@ function FeedPage() {
         }
     }
 
-    async function handlePostPhotoSelect(file: File | undefined) {
-        if (!file) return;
+    const MAX_POST_PHOTOS = 6;
+
+    async function handlePostPhotosSelect(files: FileList | null) {
+        if (!files || files.length === 0) return;
+
+        const selected = Array.from(files).slice(0, MAX_POST_PHOTOS - postPhotoUrls.length);
+        if (selected.length === 0) return;
 
         setPostPhotoUploading(true);
 
         try {
-            const { photo_url } = await uploadPostPhoto(file);
-            setPostPhotoUrl(photo_url);
+            const uploaded = await Promise.all(selected.map((file) => uploadPostPhoto(file)));
+            setPostPhotoUrls((prev) => [...prev, ...uploaded.map((result) => result.photo_url)].slice(0, MAX_POST_PHOTOS));
         } catch (error) {
             console.error(error);
         } finally {
@@ -1134,11 +1248,15 @@ function FeedPage() {
         }
     }
 
+    function removePostPhoto(url: string) {
+        setPostPhotoUrls((prev) => prev.filter((existing) => existing !== url));
+    }
+
     function closeComposer() {
         setComposerOpen(false);
         setEditingPostId(null);
         setDrafts((prev) => ({ ...prev, [NEW_POST_KEY]: "" }));
-        setPostPhotoUrl(null);
+        setPostPhotoUrls([]);
         setShareTarget(null);
         setEmojiPickerOpen(null);
         setComposerView("compose");
@@ -1174,7 +1292,7 @@ function FeedPage() {
     async function handleSubmitPost(event: FormEvent) {
         event.preventDefault();
         const body = (drafts[NEW_POST_KEY] || "").trim();
-        if (!body && !postPhotoUrl && !shareTarget) return;
+        if (!body && postPhotoUrls.length === 0 && !shareTarget) return;
 
         setPosting((prev) => new Set(prev).add(NEW_POST_KEY));
 
@@ -1187,7 +1305,7 @@ function FeedPage() {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                           body,
-                          photo_url: postPhotoUrl,
+                          photo_urls: postPhotoUrls,
                           mentioned_user_ids: mentionedUserIds,
                           course_id: taggedCourse?.id ?? null,
                       }),
@@ -1197,7 +1315,7 @@ function FeedPage() {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                           body,
-                          photo_url: postPhotoUrl,
+                          photo_urls: postPhotoUrls,
                           shared_item_type: shareTarget?.item_type ?? null,
                           shared_item_id: shareTarget?.item_id ?? null,
                           mentioned_user_ids: mentionedUserIds,
@@ -1223,7 +1341,7 @@ function FeedPage() {
     function startEditPost(item: FeedItem) {
         setEditingPostId(item.item_id);
         setDrafts((prev) => ({ ...prev, [NEW_POST_KEY]: item.body || "" }));
-        setPostPhotoUrl(item.photo_url);
+        setPostPhotoUrls(item.photo_urls);
         setShareTarget(null);
         setPostMenuOpen(null);
         setTaggedCourse(item.course_id ? { id: item.course_id, name: item.course_name || "Course" } : null);
@@ -1288,10 +1406,11 @@ function FeedPage() {
                         <input
                             type="file"
                             accept="image/*"
+                            multiple
                             hidden
                             onChange={(event) => {
                                 setComposerOpen(true);
-                                handlePostPhotoSelect(event.target.files?.[0]);
+                                handlePostPhotosSelect(event.target.files);
                             }}
                         />
                     </label>
@@ -1374,9 +1493,10 @@ function FeedPage() {
                                     </p>
                                 )}
 
-                                {item.photo_url && (
-                                    <img src={item.photo_url} alt="" className="feed-card-photo" />
-                                )}
+                                <PhotoGallery
+                                    photos={item.photo_urls}
+                                    onOpen={(index) => openLightbox(item.photo_urls, index)}
+                                />
 
                                 {item.shared_item && (
                                     <div className="feed-shared-item">
@@ -1398,13 +1518,10 @@ function FeedPage() {
                                             </p>
                                         )}
 
-                                        {item.shared_item.photo_url && (
-                                            <img
-                                                src={item.shared_item.photo_url}
-                                                alt=""
-                                                className="feed-card-photo"
-                                            />
-                                        )}
+                                        <PhotoGallery
+                                            photos={item.shared_item.photo_urls}
+                                            onOpen={(index) => openLightbox(item.shared_item!.photo_urls, index)}
+                                        />
 
                                         {item.shared_item.course_photo_url && (
                                             <img
@@ -1764,12 +1881,16 @@ function FeedPage() {
                                 </div>
                             )}
 
-                            {postPhotoUrl && (
-                                <div className="post-photo-preview">
-                                    <img src={postPhotoUrl} alt="" />
-                                    <button type="button" onClick={() => setPostPhotoUrl(null)}>
-                                        ✕
-                                    </button>
+                            {postPhotoUrls.length > 0 && (
+                                <div className="post-photo-preview-strip">
+                                    {postPhotoUrls.map((url) => (
+                                        <div className="post-photo-preview" key={url}>
+                                            <img src={url} alt="" />
+                                            <button type="button" onClick={() => removePostPhoto(url)}>
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
 
@@ -1805,9 +1926,11 @@ function FeedPage() {
                                 <input
                                     type="file"
                                     accept="image/*"
+                                    multiple
                                     hidden
+                                    disabled={postPhotoUrls.length >= MAX_POST_PHOTOS}
                                     onChange={(event) =>
-                                        handlePostPhotoSelect(event.target.files?.[0])
+                                        handlePostPhotosSelect(event.target.files)
                                     }
                                 />
                             </label>
@@ -2033,6 +2156,16 @@ function FeedPage() {
                         )}
                     </div>
                 </div>
+            )}
+
+            {lightbox && (
+                <Lightbox
+                    photos={lightbox.photos}
+                    index={lightbox.index}
+                    onClose={closeLightbox}
+                    onPrev={lightboxPrev}
+                    onNext={lightboxNext}
+                />
             )}
         </div>
     );

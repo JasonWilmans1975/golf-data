@@ -1103,6 +1103,125 @@ button {
     height: 180px;
 }
 
+.feed-card-photo-button {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+.feed-photo-grid {
+    display: grid;
+    gap: 3px;
+    width: calc(100% + 32px);
+    margin: 0 -16px 14px;
+}
+
+.feed-shared-item .feed-photo-grid {
+    width: 100%;
+    margin: 0 0 10px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.feed-photo-grid-2 {
+    grid-template-columns: 1fr 1fr;
+}
+
+.feed-photo-grid-3 {
+    grid-template-columns: 1fr 1fr;
+}
+
+.feed-photo-grid-3 .feed-photo-grid-tile:first-child {
+    grid-row: span 2;
+}
+
+.feed-photo-grid-4 {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+}
+
+.feed-photo-grid-tile {
+    position: relative;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+    height: 140px;
+    overflow: hidden;
+}
+
+.feed-photo-grid-tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.feed-photo-grid-more {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.lightbox-overlay {
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.lightbox-image {
+    max-width: 92vw;
+    max-height: 88vh;
+    object-fit: contain;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.lightbox-prev {
+    left: 16px;
+}
+
+.lightbox-next {
+    right: 16px;
+}
+
 .feed-card-body {
     display: flex;
     align-items: center;
@@ -1357,6 +1476,19 @@ button {
 .composer-icon-button:hover {
     background: var(--panel-2);
     color: var(--accent);
+}
+
+.post-photo-preview-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-bottom: 12px;
+}
+
+.post-photo-preview-strip .post-photo-preview {
+    margin-bottom: 0;
+    max-width: 120px;
+    flex: 0 0 auto;
 }
 
 .post-photo-preview {
