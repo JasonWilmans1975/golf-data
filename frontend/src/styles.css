@@ -1471,6 +1471,10 @@ button {
     gap: 8px;
 }
 
+.post-reaction-left {
+    position: relative;
+}
+
 .post-reaction-summary {
     display: flex;
     align-items: center;
@@ -1484,8 +1488,8 @@ button {
     cursor: pointer;
 }
 
-.post-reaction-summary:disabled {
-    cursor: default;
+.post-reaction-summary.reacted {
+    color: var(--accent);
 }
 
 .post-reaction-summary svg {
@@ -1493,32 +1497,24 @@ button {
     height: 16px;
 }
 
-.post-reaction-types {
+.post-reaction-preview {
     display: flex;
     align-items: center;
     gap: 2px;
-}
-
-.post-reaction-types button {
     background: none;
     border: none;
-    font-size: 18px;
-    line-height: 1;
-    padding: 6px;
-    border-radius: 50%;
+    padding: 4px 6px;
     cursor: pointer;
-    transition: transform 0.1s ease;
-    opacity: 0.55;
+    font-size: 14px;
+    line-height: 1;
 }
 
-.post-reaction-types button:hover {
-    transform: scale(1.2);
-    opacity: 1;
+.post-reaction-preview span {
+    margin-left: -4px;
 }
 
-.post-reaction-types button.active {
-    background: var(--accent-soft);
-    opacity: 1;
+.post-reaction-preview span:first-child {
+    margin-left: 0;
 }
 
 .reaction-details-card {

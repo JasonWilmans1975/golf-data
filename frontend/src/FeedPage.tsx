@@ -175,12 +175,21 @@ function SmileIcon() {
     );
 }
 
-function ThumbsUpIcon() {
+function ThumbsUpIcon({ filled }: { filled?: boolean }) {
     return (
-        <Icon>
+        <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill={filled ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
             <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3z" />
             <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
-        </Icon>
+        </svg>
     );
 }
 
@@ -195,9 +204,8 @@ function MessageIcon() {
 function ShareIcon() {
     return (
         <Icon>
-            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-            <path d="M16 6l-4-4-4 4" />
-            <path d="M12 2v14" />
+            <polyline points="15 17 20 12 15 7" />
+            <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
         </Icon>
     );
 }
@@ -376,41 +384,68 @@ function PostReactionBar({
     itemType,
     itemId,
     reactions,
+    reactionPickerOpen,
+    onTogglePicker,
     onReact,
     onShowDetails,
 }: {
     itemType: string;
     itemId: number;
     reactions: ReactionSummary;
+    reactionPickerOpen: string | null;
+    onTogglePicker: (key: string) => void;
     onReact: (itemType: string, itemId: number, reaction: string) => void;
     onShowDetails: (itemType: string, itemId: number) => void;
 }) {
+    const key = itemKey(itemType, itemId);
+
+    // Most-used reaction first, matching Facebook's little emoji cluster --
+    // read-only, just previewing what's there, not another way to react.
+    const presentTypes = Object.entries(reactions.counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([reaction]) => reaction);
+
     return (
         <div className="post-reaction-bar">
-            <button
-                type="button"
-                className="post-reaction-summary"
-                disabled={reactions.total === 0}
-                onClick={() => onShowDetails(itemType, itemId)}
-                aria-label="See who reacted"
-            >
-                <ThumbsUpIcon />
-                {reactions.total > 0 && <span>{reactions.total}</span>}
-            </button>
+            <div className="reaction-bar post-reaction-left">
+                <button
+                    type="button"
+                    className={`post-reaction-summary${reactions.my_reaction ? " reacted" : ""}`}
+                    onClick={() => onTogglePicker(key)}
+                    aria-label={reactions.my_reaction ? "Change reaction" : "React"}
+                >
+                    <ThumbsUpIcon filled={Boolean(reactions.my_reaction)} />
+                    {reactions.total > 0 && <span>{reactions.total}</span>}
+                </button>
 
-            <div className="post-reaction-types">
-                {Object.entries(REACTION_EMOJI).map(([reaction, emoji]) => (
-                    <button
-                        type="button"
-                        key={reaction}
-                        className={reactions.my_reaction === reaction ? "active" : ""}
-                        aria-label={reaction}
-                        onClick={() => onReact(itemType, itemId, reaction)}
-                    >
-                        {emoji}
-                    </button>
-                ))}
+                {reactionPickerOpen === key && (
+                    <div className="reaction-picker">
+                        {Object.entries(REACTION_EMOJI).map(([reaction, emoji]) => (
+                            <button
+                                type="button"
+                                key={reaction}
+                                className={reactions.my_reaction === reaction ? "active" : ""}
+                                onClick={() => onReact(itemType, itemId, reaction)}
+                            >
+                                {emoji}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
+
+            {presentTypes.length > 0 && (
+                <button
+                    type="button"
+                    className="post-reaction-preview"
+                    onClick={() => onShowDetails(itemType, itemId)}
+                    aria-label="See who reacted"
+                >
+                    {presentTypes.slice(0, 3).map((reaction) => (
+                        <span key={reaction}>{REACTION_EMOJI[reaction]}</span>
+                    ))}
+                </button>
+            )}
         </div>
     );
 }
@@ -1323,6 +1358,10 @@ function FeedPage() {
                                         itemType={item.item_type}
                                         itemId={item.item_id}
                                         reactions={item.reactions}
+                                        reactionPickerOpen={reactionPickerOpen}
+                                        onTogglePicker={(k) =>
+                                            setReactionPickerOpen((prev) => (prev === k ? null : k))
+                                        }
                                         onReact={react}
                                         onShowDetails={openReactionDetails}
                                     />
