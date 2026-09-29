@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from .config import settings
-from .db import supabase, fetch_all
+from .db import supabase, fetch_all, execute_with_retry
 from .auth import get_current_user_id, get_user_id_from_token
 from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities, delete_tokens as delete_strava_tokens
 from .courses import (
@@ -143,12 +143,8 @@ async def auth_callback(code: str | None = None, error: str | None = None, state
 
 @app.get("/strava/status")
 def strava_status(user_id: str = Depends(get_current_user_id)):
-    token_resp = (
-        supabase.table("strava_tokens")
-        .select("athlete_id")
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
+    token_resp = execute_with_retry(
+        lambda: supabase.table("strava_tokens").select("athlete_id").eq("user_id", user_id).limit(1)
     )
     return {"connected": bool(token_resp.data)}
 

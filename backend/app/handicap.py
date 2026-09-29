@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from playwright.async_api import async_playwright
 from starlette.concurrency import run_in_threadpool
 
-from .db import supabase, fetch_all
+from .db import supabase, fetch_all, execute_with_retry
 from .courses import match_handicap_scores_to_courses
 from .crypto import encrypt, decrypt
 from .milestones import check_and_award_milestones
@@ -80,12 +80,8 @@ def delete_credentials(user_id: str) -> None:
 
 
 def get_credentials_status(user_id: str) -> dict | None:
-    response = (
-        supabase
-        .table("handicap_credentials")
-        .select("member_no,invalid_since")
-        .eq("user_id", user_id)
-        .execute()
+    response = execute_with_retry(
+        lambda: supabase.table("handicap_credentials").select("member_no,invalid_since").eq("user_id", user_id)
     )
 
     return response.data[0] if response.data else None
@@ -224,16 +220,13 @@ def _to_float(value):
 
 def _already_synced_today(user_id: str) -> bool:
     # This is only ever an optimization (skip a sync that already happened
-    # today) -- if the check itself fails (seen in production: a transient
-    # "Route not found" from PostgREST), failing open and syncing anyway is
-    # always safe, whereas letting it crash the whole request isn't.
+    # today) -- if the check still fails even after execute_with_retry's own
+    # retries (seen in production: a transient "Route not found" from
+    # Supabase's gateway), failing open and syncing anyway is always safe,
+    # whereas letting it crash the whole request isn't.
     try:
-        state = (
-            supabase
-            .table("handicap_sync_state")
-            .select("last_synced_at")
-            .eq("user_id", user_id)
-            .execute()
+        state = execute_with_retry(
+            lambda: supabase.table("handicap_sync_state").select("last_synced_at").eq("user_id", user_id)
         )
     except Exception:
         logger.exception("Could not check last sync time for user %s -- syncing anyway", user_id)

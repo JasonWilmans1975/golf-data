@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from garminconnect import Garmin
 from starlette.concurrency import run_in_threadpool
 
-from .db import supabase
+from .db import supabase, execute_with_retry
 from .crypto import encrypt, decrypt
 
 # First sync per user pulls this far back; later syncs only need "since
@@ -40,12 +40,8 @@ def delete_credentials(user_id: str) -> None:
 
 
 def get_credentials_status(user_id: str) -> dict | None:
-    response = (
-        supabase
-        .table("garmin_credentials")
-        .select("email")
-        .eq("user_id", user_id)
-        .execute()
+    response = execute_with_retry(
+        lambda: supabase.table("garmin_credentials").select("email").eq("user_id", user_id)
     )
 
     return response.data[0] if response.data else None

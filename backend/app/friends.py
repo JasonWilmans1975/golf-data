@@ -2,7 +2,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-from .db import supabase, fetch_all
+from .db import supabase, fetch_all, execute_with_retry
 
 
 def _now() -> str:
@@ -65,7 +65,9 @@ PROFILE_FIELDS = (
 
 
 def get_profile(user_id: str) -> dict:
-    response = supabase.table("profiles").select(PROFILE_FIELDS).eq("user_id", user_id).limit(1).execute()
+    response = execute_with_retry(
+        lambda: supabase.table("profiles").select(PROFILE_FIELDS).eq("user_id", user_id).limit(1)
+    )
 
     if not response.data:
         return {"user_id": user_id, "email": None, "display_name": None}

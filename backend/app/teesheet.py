@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 from starlette.concurrency import run_in_threadpool
 
-from .db import supabase
+from .db import supabase, execute_with_retry
 from .crypto import encrypt, decrypt
 from .friends import auto_friend_teesheet_buddies
 
@@ -28,12 +28,8 @@ def delete_credentials(user_id: str) -> None:
 
 
 def get_credentials_status(user_id: str) -> dict | None:
-    response = (
-        supabase
-        .table("teesheet_credentials")
-        .select("club_name,member_id")
-        .eq("user_id", user_id)
-        .execute()
+    response = execute_with_retry(
+        lambda: supabase.table("teesheet_credentials").select("club_name,member_id").eq("user_id", user_id)
     )
 
     return response.data[0] if response.data else None
