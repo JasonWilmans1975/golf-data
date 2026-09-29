@@ -663,3 +663,32 @@ create table if not exists public.saved_items (
   unique (user_id, item_type, item_id)
 );
 create index if not exists saved_items_user_id_idx on public.saved_items(user_id, created_at desc);
+
+-- Facebook/Instagram-style Stories: ephemeral photo posts, one photo per
+-- story, shown as a ring around a friend's avatar for 24 hours. Expiry is
+-- a query filter (created_at > now() - 24h), not a delete job -- matches
+-- this codebase's existing preference for soft-filtering over eager
+-- deletion (see handicap_scores.hidden_from_feed).
+insert into storage.buckets (id, name, public)
+values ('stories', 'stories', true)
+on conflict (id) do nothing;
+
+create table if not exists public.stories (
+  id bigint generated always as identity primary key,
+  user_id uuid not null,
+  photo_url text not null,
+  caption text,
+  created_at timestamptz default now()
+);
+create index if not exists stories_user_id_idx on public.stories(user_id, created_at desc);
+
+create table if not exists public.story_views (
+  id bigint generated always as identity primary key,
+  story_id bigint not null references public.stories(id) on delete cascade,
+  viewer_id uuid not null,
+  viewed_at timestamptz default now(),
+  unique (story_id, viewer_id)
+);
+create index if not exists story_views_story_id_idx on public.story_views(story_id);
+
+alter publication supabase_realtime add table public.stories;

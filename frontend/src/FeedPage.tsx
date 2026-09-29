@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { API, authFetch, uploadPostPhoto } from "./api";
+import { API, authFetch, uploadPostPhoto, uploadStory } from "./api";
 import AppNav from "./AppNav";
 import BrandLogo from "./BrandLogo";
 import BottomNav from "./BottomNav";
 import { supabase } from "./supabaseClient";
 import { useAuth } from "./AuthContext";
 import { Avatar, FriendProfileModal } from "./FriendProfileModal";
+import { StoryBar, type StoryGroup } from "./StoryBar";
+import { StoryViewer } from "./StoryViewer";
 
 type ReactionSummary = {
     counts: Record<string, number>;
@@ -713,6 +715,11 @@ function FeedPage() {
     const [pulling, setPulling] = useState(false);
     const touchStartYRef = useRef<number | null>(null);
 
+    const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
+    const [storyUploading, setStoryUploading] = useState(false);
+    const [activeStoryGroupIndex, setActiveStoryGroupIndex] = useState<number | null>(null);
+    const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+
     const [comments, setComments] = useState<Record<string, Comment[]>>({});
     const [drafts, setDrafts] = useState<Record<string, string>>({});
     const [posting, setPosting] = useState<Set<string>>(new Set());
@@ -859,6 +866,57 @@ function FeedPage() {
         }
     }
 
+    async function loadStories() {
+        try {
+            const response = await authFetch(`${API}/stories`);
+            if (response.ok) setStoryGroups(await response.json());
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function handleAddStoryFile(file: File) {
+        setStoryUploading(true);
+
+        try {
+            await uploadStory(file, "");
+            await loadStories();
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setStoryUploading(false);
+        }
+    }
+
+    function openStoryGroup(index: number) {
+        setActiveStoryGroupIndex(index);
+        setActiveStoryIndex(0);
+    }
+
+    function closeStoryViewer() {
+        setActiveStoryGroupIndex(null);
+        setActiveStoryIndex(0);
+    }
+
+    function navigateStoryViewer(groupIndex: number, storyIndex: number) {
+        setActiveStoryGroupIndex(groupIndex);
+        setActiveStoryIndex(storyIndex);
+    }
+
+    function markStoryViewed(storyId: number) {
+        setStoryGroups((prev) =>
+            prev.map((group) => ({
+                ...group,
+                stories: group.stories.map((story) =>
+                    story.id === storyId ? { ...story, viewed_by_me: true } : story
+                ),
+                has_unviewed: group.stories.some(
+                    (story) => story.id !== storyId && !story.viewed_by_me
+                ),
+            }))
+        );
+    }
+
     useEffect(() => {
         // The Strava OAuth callback always lands on "/" -- bounce over to
         // My Rounds so its existing sync-on-connect flow still runs there.
@@ -938,6 +996,7 @@ function FeedPage() {
 
             redirectFirstTimeUsers();
             syncHandicapThenRefresh();
+            loadStories();
         });
     }, []);
 
@@ -1049,6 +1108,34 @@ function FeedPage() {
             supabase.removeChannel(channel);
         };
     }, [myUserId, viewMode]);
+
+    useEffect(() => {
+        // A new story is much lower-frequency than a new post, so unlike
+        // the posts channel above (which now raises a banner instead of
+        // reloading) this just silently refreshes the story bar -- not
+        // disruptive the way a full feed-list swap would be.
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const channel = supabase
+            .channel("feed-page-new-stories")
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "stories" },
+                (payload) => {
+                    const row = payload.new as { user_id?: string } | null;
+                    if (!row?.user_id || row.user_id === myUserId) return;
+
+                    if (debounceTimer) clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(() => loadStories(), 500);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            supabase.removeChannel(channel);
+        };
+    }, [myUserId]);
 
     useEffect(() => {
         if (composerView !== "tagCourse") return;
@@ -1512,6 +1599,18 @@ function FeedPage() {
                     <button type="button" className="feed-new-posts-banner" onClick={() => loadFeed(true)}>
                         ↑ New posts
                     </button>
+                )}
+
+                {viewMode === "feed" && (
+                    <StoryBar
+                        groups={storyGroups}
+                        myUserId={myUserId ?? null}
+                        myName={myName}
+                        myAvatarUrl={myAvatarUrl}
+                        onOpenGroup={openStoryGroup}
+                        onAddStory={handleAddStoryFile}
+                        uploading={storyUploading}
+                    />
                 )}
 
                 <div className="feed-filter-bar">
@@ -2351,6 +2450,18 @@ function FeedPage() {
                     onClose={closeLightbox}
                     onPrev={lightboxPrev}
                     onNext={lightboxNext}
+                />
+            )}
+
+            {activeStoryGroupIndex !== null && (
+                <StoryViewer
+                    groups={storyGroups}
+                    groupIndex={activeStoryGroupIndex}
+                    storyIndex={activeStoryIndex}
+                    myUserId={myUserId ?? null}
+                    onClose={closeStoryViewer}
+                    onNavigate={navigateStoryViewer}
+                    onStoryViewed={markStoryViewed}
                 />
             )}
         </div>

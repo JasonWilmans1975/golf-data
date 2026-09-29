@@ -176,6 +176,25 @@ export async function uploadAvatarPhoto(file: File) {
     return (await response.json()) as { avatar_url: string };
 }
 
+export async function uploadStory(file: File, caption: string) {
+    const compressed = await compressImage(file);
+
+    const formData = new FormData();
+    formData.append("file", compressed);
+    if (caption.trim()) formData.append("caption", caption.trim());
+
+    const response = await authFetch(`${API}/stories`, {
+        method: "POST",
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to upload story");
+    }
+
+    return await response.json();
+}
+
 export function courseMarkerIcon(course: {
     name: string;
     photo_url?: string | null;

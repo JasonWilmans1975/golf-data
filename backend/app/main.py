@@ -2,7 +2,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile, File
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -77,9 +77,17 @@ from .tournaments import (
     respond_to_tournament,
     get_tournament_leaderboard,
 )
+from .stories import (
+    create_story,
+    list_stories,
+    record_story_view,
+    get_story_viewers,
+    delete_story,
+)
 
 COURSE_PHOTOS_BUCKET = "course-photos"
 POST_PHOTOS_BUCKET = "post-photos"
+STORY_PHOTOS_BUCKET = "stories"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("golfcircle")
@@ -925,6 +933,60 @@ def feed_toggle_save(item_type: str, item_id: int, user_id: str = Depends(get_cu
 @app.get("/feed/saved")
 def feed_saved(limit: int = 20, offset: int = 0, user_id: str = Depends(get_current_user_id)):
     return list_saved_items(user_id, limit=limit, offset=offset)
+
+
+@app.post("/stories")
+async def upload_story(
+    file: UploadFile = File(...),
+    caption: str = Form(None),
+    user_id: str = Depends(get_current_user_id),
+):
+    contents = await file.read()
+    extension = (file.filename or "").rsplit(".", 1)[-1].lower() or "jpg"
+    path = f"{user_id}/{uuid.uuid4().hex}.{extension}"
+
+    supabase.storage.from_(STORY_PHOTOS_BUCKET).upload(
+        path,
+        contents,
+        {"content-type": file.content_type or "image/jpeg"},
+    )
+
+    photo_url = supabase.storage.from_(STORY_PHOTOS_BUCKET).get_public_url(path)
+
+    return create_story(user_id, photo_url, caption)
+
+
+@app.get("/stories")
+def stories_list(user_id: str = Depends(get_current_user_id)):
+    return list_stories(user_id)
+
+
+@app.post("/stories/{story_id}/view")
+def stories_view(story_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        record_story_view(user_id, story_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+    return {"ok": True}
+
+
+@app.get("/stories/{story_id}/viewers")
+def stories_viewers(story_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        return get_story_viewers(user_id, story_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+
+@app.delete("/stories/{story_id}")
+def stories_delete(story_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        delete_story(user_id, story_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+    return {"deleted": True}
 
 
 @app.get("/notifications")
