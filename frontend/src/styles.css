@@ -972,6 +972,72 @@ button {
     box-shadow: 0 0 0 2px var(--border-strong), 0 4px 14px rgba(0, 0, 0, 0.12);
 }
 
+.feed-filter-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+
+.feed-filter-tabs {
+    display: flex;
+    gap: 6px;
+}
+
+.feed-filter-tab {
+    background: none;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.feed-filter-tab.active {
+    background: var(--panel-2);
+    color: var(--text);
+}
+
+.feed-filter-pills {
+    display: flex;
+    gap: 8px;
+}
+
+.feed-filter-select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 13px;
+    color: var(--text);
+}
+
+.feed-pull-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    transition: height 0.15s ease;
+}
+
+.feed-new-posts-banner {
+    display: block;
+    width: 100%;
+    margin-bottom: 14px;
+    padding: 10px;
+    border-radius: 20px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
 .feed-load-more-sentinel {
     padding: 16px 0;
     text-align: center;

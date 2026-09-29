@@ -650,3 +650,16 @@ create table if not exists public.post_photos (
   created_at timestamptz default now()
 );
 create index if not exists post_photos_post_id_idx on public.post_photos(post_id, position);
+
+-- Personal save/bookmark list, for posts and rounds -- mirrors the
+-- feed_comments/feed_likes item_type pattern rather than a posts-only
+-- table. Personal and non-collaborative, so no RLS/Realtime needed.
+create table if not exists public.saved_items (
+  id bigint generated always as identity primary key,
+  user_id uuid not null,
+  item_type text not null check (item_type in ('round', 'post')),
+  item_id bigint not null,
+  created_at timestamptz default now(),
+  unique (user_id, item_type, item_id)
+);
+create index if not exists saved_items_user_id_idx on public.saved_items(user_id, created_at desc);

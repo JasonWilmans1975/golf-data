@@ -1214,6 +1214,153 @@ def _can_view_item(viewer_id: str, owner_id: str) -> bool:
     return owner_id in list_friend_ids(viewer_id)
 
 
+def toggle_saved_item(user_id: str, item_type: str, item_id: int) -> dict:
+    owner_id = _item_owner(item_type, item_id)
+
+    if owner_id is None or not _can_view_item(user_id, owner_id):
+        raise ValueError("Not found")
+
+    existing = (
+        supabase
+        .table("saved_items")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("item_type", item_type)
+        .eq("item_id", item_id)
+        .limit(1)
+        .execute()
+    )
+
+    if existing.data:
+        supabase.table("saved_items").delete().eq("id", existing.data[0]["id"]).execute()
+        return {"saved": False}
+
+    supabase.table("saved_items").insert({
+        "user_id": user_id, "item_type": item_type, "item_id": item_id
+    }).execute()
+    return {"saved": True}
+
+
+def list_saved_items(user_id: str, limit: int = 20, offset: int = 0) -> dict:
+    """Reuses _build_feed_items (the same batched profile/course/reaction/
+    comment/photo lookups the main /feed uses) so a saved item shows exactly
+    like it does on the Feed -- reactions, comment count, photos and all --
+    instead of the thinner _snapshot_item shape (built only for a shared-
+    post preview, missing most of those fields)."""
+    response = (
+        supabase
+        .table("saved_items")
+        .select("id,item_type,item_id,created_at")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .range(offset, offset + limit - 1)
+        .execute()
+    )
+    rows = response.data or []
+
+    if not rows:
+        return {"items": []}
+
+    round_ids = [row["item_id"] for row in rows if row["item_type"] == "round"]
+    post_ids = [row["item_id"] for row in rows if row["item_type"] == "post"]
+
+    def _fetch_scores():
+        if not round_ids:
+            return {}
+        response = (
+            supabase
+            .table("handicap_scores")
+            .select(
+                "score_id,user_id,play_date,adjusted_gross,stableford_points,"
+                "course_id,course_name,country_name,country_flag_url"
+            )
+            .in_("score_id", round_ids)
+            .execute()
+        )
+        return {row["score_id"]: row for row in response.data or []}
+
+    def _fetch_posts():
+        if not post_ids:
+            return {}
+        response = (
+            supabase
+            .table("posts")
+            .select(
+                "id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at,"
+                "is_system_generated,edited_at,course_id"
+            )
+            .in_("id", post_ids)
+            .execute()
+        )
+        return {row["id"]: row for row in response.data or []}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        scores_future = pool.submit(_fetch_scores)
+        posts_future = pool.submit(_fetch_posts)
+
+        score_by_id = scores_future.result()
+        post_by_id = posts_future.result()
+
+    page = []
+    stale_ids: list[int] = []
+
+    for row in rows:
+        if row["item_type"] == "round":
+            raw = score_by_id.get(row["item_id"])
+            posted_at_field = "play_date"
+        else:
+            raw = post_by_id.get(row["item_id"])
+            posted_at_field = "created_at"
+
+        # A saved post can be deleted, or a saved round's row could vanish
+        # entirely -- skip (and clean up) anything that no longer resolves
+        # rather than erroring the whole list over one stale bookmark.
+        # Deliberately not filtered by hidden_from_feed here: a round you
+        # explicitly saved should keep showing up even if it later drops out
+        # of the main Feed's fan-out. A permission change (no longer
+        # friends) is left alone too, not treated as "gone".
+        if raw is None:
+            stale_ids.append(row["id"])
+            continue
+
+        if not _can_view_item(user_id, raw["user_id"]):
+            continue
+
+        page.append({
+            "item_type": row["item_type"],
+            "item_id": row["item_id"],
+            "posted_at": raw[posted_at_field],
+            "raw": raw,
+        })
+
+    if stale_ids:
+        supabase.table("saved_items").delete().in_("id", stale_ids).execute()
+
+    return _build_feed_items(user_id, page)
+
+
+def _saved_item_keys(user_id: str, pairs: list[tuple[str, int]]) -> set[tuple[str, int]]:
+    if not pairs:
+        return set()
+
+    response = (
+        supabase
+        .table("saved_items")
+        .select("item_type,item_id")
+        .eq("user_id", user_id)
+        .in_("item_type", list({item_type for item_type, _ in pairs}))
+        .in_("item_id", list({item_id for _, item_id in pairs}))
+        .execute()
+    )
+
+    valid = set(pairs)
+    return {
+        (row["item_type"], row["item_id"])
+        for row in response.data or []
+        if (row["item_type"], row["item_id"]) in valid
+    }
+
+
 def _group_comments_by_thread(rows: list[dict]) -> list[dict]:
     """Flat, created_at-ascending comment dicts (each already carrying a
     "replies": [] slot) -> top-level comments with their single-level
@@ -1414,7 +1561,13 @@ def _fetch_comments_for_pairs(
     return grouped
 
 
-def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int = 0) -> dict:
+def get_activity_feed_with_comments(
+    user_id: str,
+    limit: int = 20,
+    offset: int = 0,
+    scope: str = "everyone",
+    type_filter: str = "all",
+) -> dict:
     """/feed's actual response: the feed items plus every item's comments in
     one round trip.
 
@@ -1428,14 +1581,24 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
          none of them depend on each other -- only on the (item_type, item_id)
          pairs known right after stage 2. Comment counts are derived from the
          comment rows already fetched here instead of a separate count query.
+
+    scope="friends" excludes the viewer's own items (friends' activity
+    only); type_filter narrows to just one source, skipping the other
+    source's fetch entirely rather than fetching-then-discarding, saving
+    the wasted over-fetch on the source nothing will render from. There's
+    no broader "public" audience in this closed friend-circle app, so
+    scope has only these two values.
     """
-    circle_ids = list(set(list_friend_ids(user_id) + [user_id]))
+    friend_ids = list_friend_ids(user_id)
+    circle_ids = friend_ids if scope == "friends" else list(set(friend_ids + [user_id]))
     # There's no single "feed" table to page over -- rounds and posts are
     # merged and re-sorted here -- so fetch enough of each source to cover
     # every page up to this one, then slice the combined, sorted list.
     fetch_count = offset + limit
 
     def _fetch_scores():
+        if type_filter == "posts" or not circle_ids:
+            return []
         response = (
             supabase
             .table("handicap_scores")
@@ -1452,6 +1615,8 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         return response.data or []
 
     def _fetch_posts():
+        if type_filter == "rounds" or not circle_ids:
+            return []
         response = (
             supabase
             .table("posts")
@@ -1483,6 +1648,15 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
     entries.sort(key=lambda entry: str(entry["posted_at"]), reverse=True)
     page = entries[offset:offset + limit]
 
+    return _build_feed_items(user_id, page)
+
+
+def _build_feed_items(user_id: str, page: list[dict]) -> dict:
+    """Shared tail of get_activity_feed_with_comments (page = a slice of the
+    friends circle, sorted by recency) and list_saved_items (page = the
+    viewer's saved rounds/posts, in saved order) -- same batched profile/
+    course/reaction/comment/photo/saved-flag lookups and the same per-item
+    dict shape either way, built once here instead of two divergent copies."""
     if not page:
         return {"items": [], "comments": {}}
 
@@ -1514,18 +1688,20 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
     def _fetch_post_photos():
         return _photos_by_post_id(post_ids)
 
-    with ThreadPoolExecutor(max_workers=5) as pool:
+    with ThreadPoolExecutor(max_workers=6) as pool:
         profiles_future = pool.submit(_fetch_profiles)
         courses_future = pool.submit(_fetch_courses)
         reactions_future = pool.submit(_reaction_summary, user_id, pairs)
         comments_future = pool.submit(_fetch_comments_for_pairs, user_id, pairs)
         photos_future = pool.submit(_fetch_post_photos)
+        saved_future = pool.submit(_saved_item_keys, user_id, pairs)
 
         profile_by_user = profiles_future.result()
         course_by_id = courses_future.result()
         reactions_by_item = reactions_future.result()
         comments_by_key = comments_future.result()
         photos_by_post_id = photos_future.result()
+        saved_keys = saved_future.result()
 
     _attach_recent_reactor_names(user_id, reactions_by_item, profile_by_user)
 
@@ -1537,6 +1713,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         key = f"{item_type}:{item_id}"
         comment_count = _total_comment_count(comments_by_key.get(key, []))
         reactions = reactions_by_item.get((item_type, item_id), _empty_reactions())
+        is_saved = (item_type, item_id) in saved_keys
 
         if item_type == "round":
             course = course_by_id.get(raw.get("course_id"), {})
@@ -1563,6 +1740,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "reactions": reactions,
                 "is_system_generated": False,
                 "edited_at": None,
+                "is_saved": is_saved,
             })
         else:
             shared_item = None
@@ -1595,6 +1773,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "reactions": reactions,
                 "is_system_generated": bool(raw.get("is_system_generated")),
                 "edited_at": raw.get("edited_at"),
+                "is_saved": is_saved,
             })
 
     return {"items": items, "comments": comments_by_key}

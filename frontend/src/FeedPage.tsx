@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { API, authFetch, uploadPostPhoto } from "./api";
 import AppNav from "./AppNav";
@@ -62,6 +62,7 @@ type FeedItem = {
     is_system_generated: boolean;
     edited_at: string | null;
     course_id: number | null;
+    is_saved: boolean;
 };
 
 type Comment = {
@@ -249,6 +250,14 @@ function PinIcon() {
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
             <circle cx="12" cy="10" r="3" />
         </Icon>
+    );
+}
+
+function BookmarkIcon({ filled }: { filled?: boolean }) {
+    return (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+        </svg>
     );
 }
 
@@ -696,6 +705,14 @@ function FeedPage() {
     const [hasMore, setHasMore] = useState(true);
     const sentinelRef = useRef<HTMLDivElement>(null);
 
+    const [viewMode, setViewMode] = useState<"feed" | "saved">("feed");
+    const [feedScope, setFeedScope] = useState<"everyone" | "friends">("everyone");
+    const [feedTypeFilter, setFeedTypeFilter] = useState<"all" | "rounds" | "posts">("all");
+    const [newPostsAvailable, setNewPostsAvailable] = useState(false);
+    const [pullDistance, setPullDistance] = useState(0);
+    const [pulling, setPulling] = useState(false);
+    const touchStartYRef = useRef<number | null>(null);
+
     const [comments, setComments] = useState<Record<string, Comment[]>>({});
     const [drafts, setDrafts] = useState<Record<string, string>>({});
     const [posting, setPosting] = useState<Set<string>>(new Set());
@@ -754,16 +771,32 @@ function FeedPage() {
 
     const PAGE_SIZE = 20;
 
-    async function loadFeed(reset: boolean) {
+    async function loadFeed(
+        reset: boolean,
+        overrides?: {
+            viewMode?: "feed" | "saved";
+            scope?: "everyone" | "friends";
+            type?: "all" | "rounds" | "posts";
+        }
+    ) {
         if (!reset) setLoadingMore(true);
+        if (reset) setNewPostsAvailable(false);
+
+        const mode = overrides?.viewMode ?? viewMode;
+        const scope = overrides?.scope ?? feedScope;
+        const type = overrides?.type ?? feedTypeFilter;
 
         try {
-            // /feed returns each item's comments inline (comments keyed by
-            // "type:id") instead of the frontend needing a second request
-            // right after this one lands -- that used to add a full extra
-            // network round trip to every Feed page load.
+            // /feed (and /feed/saved) return each item's comments inline
+            // (comments keyed by "type:id") instead of the frontend needing
+            // a second request right after this one lands -- that used to
+            // add a full extra network round trip to every Feed page load.
             const offset = reset ? 0 : feed.length;
-            const response = await authFetch(`${API}/feed?limit=${PAGE_SIZE}&offset=${offset}`);
+            const url =
+                mode === "saved"
+                    ? `${API}/feed/saved?limit=${PAGE_SIZE}&offset=${offset}`
+                    : `${API}/feed?limit=${PAGE_SIZE}&offset=${offset}&scope=${scope}&type=${type}`;
+            const response = await authFetch(url);
 
             if (response.ok) {
                 const body: { items: FeedItem[]; comments: Record<string, Comment[]> } = await response.json();
@@ -776,6 +809,45 @@ function FeedPage() {
         } finally {
             if (!reset) setLoadingMore(false);
         }
+    }
+
+    function selectViewMode(mode: "feed" | "saved") {
+        setViewMode(mode);
+        loadFeed(true, { viewMode: mode });
+    }
+
+    function selectFeedScope(scope: "everyone" | "friends") {
+        setFeedScope(scope);
+        loadFeed(true, { scope });
+    }
+
+    function selectFeedTypeFilter(type: "all" | "rounds" | "posts") {
+        setFeedTypeFilter(type);
+        loadFeed(true, { type });
+    }
+
+    const PULL_REFRESH_THRESHOLD = 60;
+
+    function handleTouchStart(event: ReactTouchEvent) {
+        touchStartYRef.current = window.scrollY === 0 ? event.touches[0].clientY : null;
+    }
+
+    function handleTouchMove(event: ReactTouchEvent) {
+        if (touchStartYRef.current === null || window.scrollY > 0) return;
+
+        const delta = event.touches[0].clientY - touchStartYRef.current;
+        if (delta > 0) setPullDistance(Math.min(delta, 100));
+    }
+
+    async function handleTouchEnd() {
+        if (pullDistance > PULL_REFRESH_THRESHOLD) {
+            setPulling(true);
+            await loadFeed(true);
+            setPulling(false);
+        }
+
+        setPullDistance(0);
+        touchStartYRef.current = null;
     }
 
     async function loadFriends() {
@@ -944,11 +1016,17 @@ function FeedPage() {
     }, []);
 
     useEffect(() => {
-        // Auto-refresh the feed when a friend's new post lands (or an
-        // auto-post like a milestone/tournament fires), instead of making
-        // someone click a "new posts" banner. Debounced so a burst of
-        // inserts (e.g. several auto-posts firing off one sync) triggers one
-        // reload, not one per row.
+        // A friend's new post used to force-reload the whole list silently.
+        // This batch added reply composers, course-tag search and a photo
+        // lightbox -- all mid-interaction states a silent full-list swap
+        // would now disrupt more than it used to -- so this just raises a
+        // dismissible "new posts" banner instead; the reload only happens
+        // when the user taps it. Debounced so a burst of inserts (e.g.
+        // several auto-posts firing off one sync) raises the banner once,
+        // not flickers it per row. Only relevant to the main feed, not the
+        // Saved tab.
+        if (viewMode !== "feed") return;
+
         let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
         const channel = supabase
@@ -961,7 +1039,7 @@ function FeedPage() {
                     if (!row?.user_id || row.user_id === myUserId) return;
 
                     if (debounceTimer) clearTimeout(debounceTimer);
-                    debounceTimer = setTimeout(() => loadFeed(true), 500);
+                    debounceTimer = setTimeout(() => setNewPostsAvailable(true), 500);
                 }
             )
             .subscribe();
@@ -970,7 +1048,7 @@ function FeedPage() {
             if (debounceTimer) clearTimeout(debounceTimer);
             supabase.removeChannel(channel);
         };
-    }, [myUserId]);
+    }, [myUserId, viewMode]);
 
     useEffect(() => {
         if (composerView !== "tagCourse") return;
@@ -1228,6 +1306,40 @@ function FeedPage() {
         }
     }
 
+    async function toggleSaveItem(itemType: string, itemId: number) {
+        // Optimistic flip, matching react()'s pattern -- reverted below if
+        // the request fails.
+        setFeed((prev) =>
+            prev.map((item) =>
+                item.item_type === itemType && item.item_id === itemId
+                    ? { ...item, is_saved: !item.is_saved }
+                    : item
+            )
+        );
+
+        try {
+            const response = await authFetch(`${API}/feed/${itemType}/${itemId}/save`, { method: "POST" });
+            if (!response.ok) throw new Error("Failed to save");
+            const body: { saved: boolean } = await response.json();
+            setFeed((prev) =>
+                prev.map((item) =>
+                    item.item_type === itemType && item.item_id === itemId
+                        ? { ...item, is_saved: body.saved }
+                        : item
+                )
+            );
+        } catch (error) {
+            console.error(error);
+            setFeed((prev) =>
+                prev.map((item) =>
+                    item.item_type === itemType && item.item_id === itemId
+                        ? { ...item, is_saved: !item.is_saved }
+                        : item
+                )
+            );
+        }
+    }
+
     const MAX_POST_PHOTOS = 6;
 
     async function handlePostPhotosSelect(files: FileList | null) {
@@ -1384,43 +1496,108 @@ function FeedPage() {
             </header>
 
             <main className="content">
-                <div className="feed-container">
-                {syncingHandicap && (
+                <div
+                    className="feed-container"
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
+                {(pullDistance > 0 || pulling) && (
+                    <div className="feed-pull-indicator" style={{ height: pulling ? 40 : pullDistance }}>
+                        <span className={pulling ? "spinner" : ""} />
+                    </div>
+                )}
+
+                {newPostsAvailable && (
+                    <button type="button" className="feed-new-posts-banner" onClick={() => loadFeed(true)}>
+                        ↑ New posts
+                    </button>
+                )}
+
+                <div className="feed-filter-bar">
+                    <div className="feed-filter-tabs">
+                        <button
+                            type="button"
+                            className={`feed-filter-tab${viewMode === "feed" ? " active" : ""}`}
+                            onClick={() => selectViewMode("feed")}
+                        >
+                            Feed
+                        </button>
+                        <button
+                            type="button"
+                            className={`feed-filter-tab${viewMode === "saved" ? " active" : ""}`}
+                            onClick={() => selectViewMode("saved")}
+                        >
+                            Saved
+                        </button>
+                    </div>
+
+                    {viewMode === "feed" && (
+                        <div className="feed-filter-pills">
+                            <select
+                                className="feed-filter-select"
+                                value={feedScope}
+                                onChange={(event) => selectFeedScope(event.target.value as "everyone" | "friends")}
+                            >
+                                <option value="everyone">Everyone</option>
+                                <option value="friends">Only friends</option>
+                            </select>
+
+                            <select
+                                className="feed-filter-select"
+                                value={feedTypeFilter}
+                                onChange={(event) =>
+                                    selectFeedTypeFilter(event.target.value as "all" | "rounds" | "posts")
+                                }
+                            >
+                                <option value="all">All</option>
+                                <option value="rounds">Rounds only</option>
+                                <option value="posts">Posts only</option>
+                            </select>
+                        </div>
+                    )}
+                </div>
+
+                {viewMode === "feed" && syncingHandicap && (
                     <p className="feed-sync-status">
                         <span className="spinner" /> Syncing your latest handicap scores...
                     </p>
                 )}
-                <div className="feed-card feed-composer-trigger-card">
-                    <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
+                {viewMode === "feed" && (
+                    <div className="feed-card feed-composer-trigger-card">
+                        <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} small />
 
-                    <button
-                        type="button"
-                        className="feed-composer-trigger"
-                        onClick={() => setComposerOpen(true)}
-                    >
-                        {`What's on your mind${myName ? `, ${myName}` : ""}?`}
-                    </button>
+                        <button
+                            type="button"
+                            className="feed-composer-trigger"
+                            onClick={() => setComposerOpen(true)}
+                        >
+                            {`What's on your mind${myName ? `, ${myName}` : ""}?`}
+                        </button>
 
-                    <label className="composer-icon-button" aria-label="Add a photo">
-                        <ImageIcon />
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            hidden
-                            onChange={(event) => {
-                                setComposerOpen(true);
-                                handlePostPhotosSelect(event.target.files);
-                            }}
-                        />
-                    </label>
-                </div>
+                        <label className="composer-icon-button" aria-label="Add a photo">
+                            <ImageIcon />
+                            <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                hidden
+                                onChange={(event) => {
+                                    setComposerOpen(true);
+                                    handlePostPhotosSelect(event.target.files);
+                                }}
+                            />
+                        </label>
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="loading-card">Loading feed...</div>
                 ) : feed.length === 0 ? (
                     <p className="course-count" style={{ padding: 16 }}>
-                        Nothing yet — add friends or log a round to see activity here.
+                        {viewMode === "saved"
+                            ? "Nothing saved yet — tap the bookmark icon on a post or round to save it here."
+                            : "Nothing yet — add friends or log a round to see activity here."}
                     </p>
                 ) : (
                     feed.map((item) => {
@@ -1644,6 +1821,15 @@ function FeedPage() {
                                             <span className="feed-action-count">{item.comment_count}</span>
                                         </button>
                                     )}
+
+                                    <button
+                                        type="button"
+                                        className={`feed-action-button${item.is_saved ? " active" : ""}`}
+                                        aria-label={item.is_saved ? "Remove from saved" : "Save"}
+                                        onClick={() => toggleSaveItem(item.item_type, item.item_id)}
+                                    >
+                                        <BookmarkIcon filled={item.is_saved} />
+                                    </button>
 
                                     <div className="feed-share-wrap">
                                         <button

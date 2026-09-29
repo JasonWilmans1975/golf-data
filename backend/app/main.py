@@ -67,6 +67,8 @@ from .friends import (
     get_item_reaction_details,
     acknowledge_notifications,
     list_notifications,
+    toggle_saved_item,
+    list_saved_items,
 )
 from .leaderboard import get_monthly_leaderboard
 from .tournaments import (
@@ -742,8 +744,14 @@ def friends_remove(friend_user_id: str, user_id: str = Depends(get_current_user_
 
 
 @app.get("/feed")
-def activity_feed(limit: int = 20, offset: int = 0, user_id: str = Depends(get_current_user_id)):
-    return get_activity_feed_with_comments(user_id, limit=limit, offset=offset)
+def activity_feed(
+    limit: int = 20,
+    offset: int = 0,
+    scope: str = "everyone",
+    type: str = "all",
+    user_id: str = Depends(get_current_user_id),
+):
+    return get_activity_feed_with_comments(user_id, limit=limit, offset=offset, scope=scope, type_filter=type)
 
 
 class PostBody(BaseModel):
@@ -904,6 +912,19 @@ def feed_item_reaction_details(item_type: str, item_id: int, user_id: str = Depe
         return get_item_reaction_details(user_id, item_type, item_id)
     except ValueError as exc:
         raise HTTPException(404, detail=str(exc))
+
+
+@app.post("/feed/{item_type}/{item_id}/save")
+def feed_toggle_save(item_type: str, item_id: int, user_id: str = Depends(get_current_user_id)):
+    try:
+        return toggle_saved_item(user_id, item_type, item_id)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc))
+
+
+@app.get("/feed/saved")
+def feed_saved(limit: int = 20, offset: int = 0, user_id: str = Depends(get_current_user_id)):
+    return list_saved_items(user_id, limit=limit, offset=offset)
 
 
 @app.get("/notifications")
