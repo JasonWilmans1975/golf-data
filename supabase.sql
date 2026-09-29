@@ -583,3 +583,22 @@ alter table if exists public.handicap_sync_state add column if not exists home_c
 -- Set when a post's body/photo is edited after creation, so the Feed can
 -- show an "(edited)" marker -- left null on posts that never change.
 alter table if exists public.posts add column if not exists edited_at timestamptz;
+
+-- Mirrors each connected member's "Buddy List" from teesheet.co.za (a real
+-- feature there -- frequent playing partners). Matched against other
+-- GolfCircle users' own teesheet_credentials (same club, same member
+-- number) to suggest friend connections between people who already know
+-- each other as golf buddies. Full replace on every sync rather than a
+-- diff, since the source buddy list is small and can shrink too.
+create table if not exists public.teesheet_buddies (
+  id bigint generated always as identity primary key,
+  user_id uuid not null,
+  buddy_member_no text not null,
+  buddy_first_name text,
+  buddy_last_name text,
+  synced_at timestamptz default now(),
+  unique (user_id, buddy_member_no)
+);
+
+create index if not exists teesheet_buddies_user_id_idx on public.teesheet_buddies(user_id);
+create index if not exists teesheet_buddies_member_no_idx on public.teesheet_buddies(buddy_member_no);

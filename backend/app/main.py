@@ -42,6 +42,7 @@ from .friends import (
     get_profile,
     update_profile,
     search_users,
+    get_teesheet_buddy_suggestions,
     send_friend_request,
     send_friend_request_by_id,
     list_incoming_requests,
@@ -610,6 +611,11 @@ def friends_send_request(body: FriendRequestBody, user_id: str = Depends(get_cur
 @app.get("/friends/search")
 def friends_search(q: str, user_id: str = Depends(get_current_user_id)):
     return search_users(user_id, q)
+
+
+@app.get("/friends/suggestions/teesheet")
+def friends_teesheet_suggestions(user_id: str = Depends(get_current_user_id)):
+    return get_teesheet_buddy_suggestions(user_id)
 
 
 class FriendRequestByIdBody(BaseModel):

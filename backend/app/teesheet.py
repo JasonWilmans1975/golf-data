@@ -230,6 +230,35 @@ def _parse_transactions(html: str) -> dict:
     return {"balance": balance, "transactions": transactions}
 
 
+def _parse_buddy_list(html: str) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    buddies = []
+
+    table = soup.find("table", id="buddyres")
+
+    if not table:
+        return buddies
+
+    for row in table.find_all("tr")[1:]:
+        cells = row.find_all("td")
+
+        if len(cells) < 4:
+            continue
+
+        member_no = cells[0].get_text(strip=True)
+
+        if not member_no:
+            continue
+
+        buddies.append({
+            "buddy_member_no": member_no,
+            "buddy_first_name": cells[2].get_text(strip=True) or None,
+            "buddy_last_name": cells[3].get_text(strip=True) or None,
+        })
+
+    return buddies
+
+
 def _already_synced_today(user_id: str) -> bool:
     state = (
         supabase
@@ -275,13 +304,16 @@ async def sync_teesheet_data(user_id: str, force: bool = False) -> dict:
                 page, "View Spending Account Statement"
             )
             txn_data = _parse_transactions(transactions_html)
+
+            buddy_html = await _load_menu_page(page, "Buddy List")
+            buddies = _parse_buddy_list(buddy_html)
         finally:
             await browser.close()
 
-    return await run_in_threadpool(_store_teesheet_sync, user_id, bookings, txn_data)
+    return await run_in_threadpool(_store_teesheet_sync, user_id, bookings, txn_data, buddies)
 
 
-def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict) -> dict:
+def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict, buddies: list) -> dict:
     # Postgres's ON CONFLICT DO UPDATE fails outright ("cannot affect row a
     # second time") if two rows in the *same* upsert batch share a conflict
     # key -- seen for real when the scraped statement repeated a doc_number.
@@ -308,11 +340,21 @@ def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict) -> dict:
             on_conflict="user_id,doc_number",
         ).execute()
 
+    # Full replace rather than upsert -- the source buddy list can shrink
+    # (someone gets removed), which an upsert alone would never reflect.
+    supabase.table("teesheet_buddies").delete().eq("user_id", user_id).execute()
+
+    if buddies:
+        supabase.table("teesheet_buddies").insert(
+            [{**b, "user_id": user_id} for b in buddies]
+        ).execute()
+
     _mark_synced_now(user_id, txn_data["balance"])
 
     return {
         "skipped": False,
         "bookings_synced": len(bookings),
         "transactions_synced": len(txn_data["transactions"]),
+        "buddies_synced": len(buddies),
         "balance": txn_data["balance"],
     }

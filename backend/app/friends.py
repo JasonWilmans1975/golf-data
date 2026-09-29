@@ -115,6 +115,27 @@ def _find_relationship(user_id: str, other_user_id: str) -> dict | None:
     return rows[0] if rows else None
 
 
+def _relationship_status_map(user_id: str) -> dict[str, str]:
+    relationships_response = (
+        supabase
+        .table("friend_requests")
+        .select("from_user_id,to_user_id,status")
+        .or_(f"from_user_id.eq.{user_id},to_user_id.eq.{user_id}")
+        .execute()
+    )
+
+    status_by_other: dict[str, str] = {}
+    for rel in relationships_response.data or []:
+        other = rel["to_user_id"] if rel["from_user_id"] == user_id else rel["from_user_id"]
+
+        if rel["status"] == "accepted":
+            status_by_other[other] = "friends"
+        elif rel["status"] == "pending":
+            status_by_other[other] = "pending_sent" if rel["from_user_id"] == user_id else "pending_received"
+
+    return status_by_other
+
+
 def search_users(user_id: str, query: str, limit: int = 20) -> list[dict]:
     """Powers add-a-friend search -- anyone signed up should be findable by
     name/nickname/email, not just by typing their exact email address."""
@@ -142,22 +163,7 @@ def search_users(user_id: str, query: str, limit: int = 20) -> list[dict]:
     if not rows:
         return []
 
-    relationships_response = (
-        supabase
-        .table("friend_requests")
-        .select("from_user_id,to_user_id,status")
-        .or_(f"from_user_id.eq.{user_id},to_user_id.eq.{user_id}")
-        .execute()
-    )
-
-    status_by_other: dict[str, str] = {}
-    for rel in relationships_response.data or []:
-        other = rel["to_user_id"] if rel["from_user_id"] == user_id else rel["from_user_id"]
-
-        if rel["status"] == "accepted":
-            status_by_other[other] = "friends"
-        elif rel["status"] == "pending":
-            status_by_other[other] = "pending_sent" if rel["from_user_id"] == user_id else "pending_received"
+    status_by_other = _relationship_status_map(user_id)
 
     return [
         {
@@ -167,6 +173,71 @@ def search_users(user_id: str, query: str, limit: int = 20) -> list[dict]:
             "relationship": status_by_other.get(row["user_id"], "none"),
         }
         for row in rows
+    ]
+
+
+def get_teesheet_buddy_suggestions(user_id: str) -> list[dict]:
+    """Cross-references your teesheet.co.za Buddy List (frequent playing
+    partners, a real feature there) against other GolfCircle users' own
+    teesheet credentials -- same club, matching member number -- to surface
+    people you already golf with as friend suggestions."""
+    my_credentials = (
+        supabase
+        .table("teesheet_credentials")
+        .select("club_id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not my_credentials.data:
+        return []
+
+    club_id = my_credentials.data[0]["club_id"]
+
+    buddy_rows = (
+        supabase
+        .table("teesheet_buddies")
+        .select("buddy_member_no")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    buddy_member_nos = [row["buddy_member_no"] for row in buddy_rows.data or []]
+
+    if not buddy_member_nos:
+        return []
+
+    matches_response = (
+        supabase
+        .table("teesheet_credentials")
+        .select("user_id,member_id")
+        .eq("club_id", club_id)
+        .in_("member_id", buddy_member_nos)
+        .neq("user_id", user_id)
+        .execute()
+    )
+    matched_user_ids = [row["user_id"] for row in matches_response.data or []]
+
+    if not matched_user_ids:
+        return []
+
+    profiles_response = (
+        supabase
+        .table("profiles")
+        .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
+        .in_("user_id", matched_user_ids)
+        .execute()
+    )
+    status_by_other = _relationship_status_map(user_id)
+
+    return [
+        {
+            "user_id": row["user_id"],
+            "display_name": _display_name(row),
+            "avatar_url": _avatar_url(row),
+            "relationship": status_by_other.get(row["user_id"], "none"),
+        }
+        for row in profiles_response.data or []
     ]
 
 
