@@ -86,6 +86,7 @@ function FriendsPage() {
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [searching, setSearching] = useState(false);
     const [teesheetBuddies, setTeesheetBuddies] = useState<TeesheetBuddy[]>([]);
+    const [tab, setTab] = useState<"friends" | "buddies">("friends");
     const [sendingTo, setSendingTo] = useState<string | null>(null);
     const [sendError, setSendError] = useState<string | null>(null);
     const [sendMessage, setSendMessage] = useState<string | null>(null);
@@ -266,6 +267,23 @@ function FriendsPage() {
                     <p>Add friends to see the rounds and courses they've been playing.</p>
                 </section>
 
+                <div className="settings-tabs">
+                    <button
+                        className={tab === "friends" ? "settings-tab active" : "settings-tab"}
+                        onClick={() => setTab("friends")}
+                    >
+                        Friends
+                    </button>
+                    <button
+                        className={tab === "buddies" ? "settings-tab active" : "settings-tab"}
+                        onClick={() => setTab("buddies")}
+                    >
+                        People you play with{teesheetBuddies.length > 0 ? ` (${teesheetBuddies.length})` : ""}
+                    </button>
+                </div>
+
+                {tab === "friends" && (
+                <>
                 <section className="chart-card">
                     <div className="chart-heading">
                         <div>
@@ -327,7 +345,10 @@ function FriendsPage() {
                     )}
                 </section>
 
-                {teesheetBuddies.length > 0 && (
+                </>
+                )}
+
+                {tab === "buddies" && (
                     <>
                         <section className="section-heading">
                             <div>
@@ -337,6 +358,13 @@ function FriendsPage() {
 
                             <span className="course-count">{teesheetBuddies.length}</span>
                         </section>
+
+                        {teesheetBuddies.length === 0 && (
+                            <p className="course-count" style={{ padding: 16 }}>
+                                No teesheet buddies to show — either you're all set, or none of
+                                your buddies have connected yet.
+                            </p>
+                        )}
 
                         <div className="round-list">
                             {teesheetBuddies.map((buddy) => (
@@ -382,6 +410,8 @@ function FriendsPage() {
                     </>
                 )}
 
+                {tab === "friends" && (
+                <>
                 {requests.length > 0 && (
                     <>
                         <section className="section-heading">
@@ -550,6 +580,8 @@ function FriendsPage() {
                         ))
                     )}
                 </div>
+                </>
+                )}
             </main>
         </>
     );
