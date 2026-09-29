@@ -571,46 +571,21 @@ function SettingsPage() {
                                 <p className="course-count">Checking connected accounts...</p>
                             ) : (
                                 <>
-                                <div className="integration-row">
-                                    <div className="integration-row-main">
-                                        <div>
-                                            <strong>Strava</strong>
-                                            <span className="course-count">
-                                                {stravaConnected ? "Connected" : "Not connected"}
-                                            </span>
-                                        </div>
-
-                                        <div className="integration-row-actions">
-                                            {stravaConnected && (
-                                                <button
-                                                    className="sync-button"
-                                                    onClick={handleSyncStrava}
-                                                    disabled={stravaSyncing}
-                                                >
-                                                    {stravaSyncing ? "Syncing..." : "Sync now"}
-                                                </button>
-                                            )}
-                                            <button className="integration-action-button" onClick={handleConnectStrava}>
-                                                {stravaConnected ? "Reconnect" : "Connect"}
-                                            </button>
-                                            {stravaConnected && (
-                                                <button
-                                                    className="integration-action-button integration-action-button--danger"
-                                                    onClick={handleDisconnectStrava}
-                                                >
-                                                    Log out
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {stravaSyncMessage && <p className="course-count">{stravaSyncMessage}</p>}
-                                </div>
+                                {!stravaConnected && !connected && !garminConnected && !teesheetConnected && (
+                                    <p className="integration-welcome-note">
+                                        👋 Welcome to GolfCircle! Start by connecting your{" "}
+                                        <strong>handicaps.co.za</strong> account below — that's what
+                                        powers your handicap, rounds, and leaderboards.
+                                    </p>
+                                )}
 
                                 <div className="integration-row">
                                     <div className="integration-row-main">
                                         <div>
                                             <strong>Handicaps.co.za</strong>
+                                            {!connected && !stravaConnected && !garminConnected && !teesheetConnected && (
+                                                <span className="integration-start-badge">Start here</span>
+                                            )}
                                             <span
                                                 className="course-count"
                                                 style={needsReconnect ? { color: "var(--error)" } : undefined}
@@ -703,6 +678,42 @@ function SettingsPage() {
                                     {!handicapEditing && handicapSyncMessage && (
                                         <p className="course-count">{handicapSyncMessage}</p>
                                     )}
+                                </div>
+
+                                <div className="integration-row">
+                                    <div className="integration-row-main">
+                                        <div>
+                                            <strong>Strava</strong>
+                                            <span className="course-count">
+                                                {stravaConnected ? "Connected" : "Not connected"}
+                                            </span>
+                                        </div>
+
+                                        <div className="integration-row-actions">
+                                            {stravaConnected && (
+                                                <button
+                                                    className="sync-button"
+                                                    onClick={handleSyncStrava}
+                                                    disabled={stravaSyncing}
+                                                >
+                                                    {stravaSyncing ? "Syncing..." : "Sync now"}
+                                                </button>
+                                            )}
+                                            <button className="integration-action-button" onClick={handleConnectStrava}>
+                                                {stravaConnected ? "Reconnect" : "Connect"}
+                                            </button>
+                                            {stravaConnected && (
+                                                <button
+                                                    className="integration-action-button integration-action-button--danger"
+                                                    onClick={handleDisconnectStrava}
+                                                >
+                                                    Log out
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {stravaSyncMessage && <p className="course-count">{stravaSyncMessage}</p>}
                                 </div>
 
                                 <div className="integration-row">

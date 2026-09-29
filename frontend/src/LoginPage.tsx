@@ -15,7 +15,7 @@ function LoginPage() {
         }
     }, [session, navigate]);
 
-    const [mode, setMode] = useState<"signin" | "signup">("signin");
+    const [mode, setMode] = useState<"intro" | "signin" | "signup">("intro");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
@@ -97,6 +97,33 @@ function LoginPage() {
                     alt="GolfCircle"
                     className="auth-logo"
                 />
+                {mode === "intro" ? (
+                    <>
+                        <h1>Welcome to GolfCircle</h1>
+
+                        <p className="auth-intro-copy">
+                            Track every round and your official handicap, and see what your
+                            golf buddies are up to — all pulled automatically once you connect
+                            an account like handicaps.co.za, Strava, Garmin, or your club.
+                        </p>
+
+                        <button
+                            className="sync-button"
+                            style={{ width: "100%" }}
+                            onClick={() => setMode("signup")}
+                        >
+                            Create an account
+                        </button>
+
+                        <button
+                            className="auth-toggle"
+                            onClick={() => setMode("signin")}
+                        >
+                            I already have an account — Sign in
+                        </button>
+                    </>
+                ) : (
+                <>
                 <h1>{mode === "signin" ? "Sign in" : "Create account"}</h1>
 
                 {signupDone ? (
@@ -296,6 +323,8 @@ function LoginPage() {
                         ? "Need an account? Sign up"
                         : "Already have an account? Sign in"}
                 </button>
+                </>
+                )}
 
                 <div style={{ marginTop: 16, textAlign: "center" }}>
                     <ThemeToggle />

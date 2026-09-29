@@ -2204,6 +2204,30 @@ button {
     flex-direction: column;
 }
 
+.integration-welcome-note {
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.5;
+}
+
+.integration-start-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+}
+
 .integration-row {
     padding: 14px 0;
     border-bottom: 1px solid var(--border);
@@ -2503,6 +2527,13 @@ button {
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: -0.01em;
+}
+
+.auth-intro-copy {
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.6;
+    margin: -8px 0 20px;
 }
 
 .auth-error {
