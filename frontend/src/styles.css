@@ -2749,6 +2749,16 @@ button {
     height: 15px;
 }
 
+.post-composer-pill-remove {
+    padding: 6px 10px;
+    color: var(--text-muted);
+}
+
+.post-composer-course-location {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
 .post-composer-form {
     display: flex;
     flex-direction: column;

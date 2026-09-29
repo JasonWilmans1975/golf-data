@@ -865,7 +865,7 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
         response = (
             supabase
             .table("posts")
-            .select("id,user_id,body,photo_url,created_at,is_system_generated")
+            .select("id,user_id,body,photo_url,created_at,is_system_generated,course_id")
             .eq("id", item_id)
             .limit(1)
             .execute()
@@ -881,6 +881,19 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
         profile = profile_response.data[0] if profile_response.data else None
         player_name, player_avatar_url = _post_identity(post, profile)
 
+        course = {}
+        if post.get("course_id"):
+            course_response = (
+                supabase
+                .table("courses")
+                .select("name,photo_url,google_photo_url,phone_number")
+                .eq("id", post["course_id"])
+                .limit(1)
+                .execute()
+            )
+            if course_response.data:
+                course = course_response.data[0]
+
         return {
             "item_type": "post",
             "item_id": post["id"],
@@ -890,9 +903,9 @@ def _snapshot_item(item_type: str, item_id: int) -> dict | None:
             "posted_at": post["created_at"],
             "body": post["body"],
             "photo_url": post.get("photo_url"),
-            "course_name": None,
-            "course_photo_url": None,
-            "course_phone": None,
+            "course_name": course.get("name"),
+            "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
+            "course_phone": course.get("phone_number"),
             "adjusted_gross": None,
             "stableford_points": None,
         }
@@ -1008,6 +1021,18 @@ def _validate_mentions(user_id: str, candidate_ids: list[str] | None) -> list[st
     return seen
 
 
+def _validate_course_id(course_id: int | None) -> int | None:
+    if course_id is None:
+        return None
+
+    existing = supabase.table("courses").select("id").eq("id", course_id).limit(1).execute()
+
+    if not existing.data:
+        raise ValueError("Course not found")
+
+    return course_id
+
+
 def create_post(
     user_id: str,
     body: str,
@@ -1016,6 +1041,7 @@ def create_post(
     photo_url: str | None = None,
     is_system_generated: bool = False,
     mentioned_user_ids: list[str] | None = None,
+    course_id: int | None = None,
 ) -> dict:
     """user_id still owns the post for visibility/permission purposes (whose
     circle sees it, who can comment) -- is_system_generated only changes how
@@ -1037,6 +1063,7 @@ def create_post(
         "photo_url": photo_url,
         "is_system_generated": is_system_generated,
         "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
+        "course_id": _validate_course_id(course_id),
     }
 
     if shared_item_type and shared_item_id:
@@ -1057,7 +1084,12 @@ def create_post(
 
 
 def update_post(
-    user_id: str, post_id: int, body: str, photo_url: str | None, mentioned_user_ids: list[str] | None = None
+    user_id: str,
+    post_id: int,
+    body: str,
+    photo_url: str | None,
+    mentioned_user_ids: list[str] | None = None,
+    course_id: int | None = None,
 ) -> dict:
     existing = supabase.table("posts").select("id,user_id").eq("id", post_id).limit(1).execute()
 
@@ -1083,6 +1115,7 @@ def update_post(
             "photo_url": photo_url,
             "edited_at": _now(),
             "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
+            "course_id": _validate_course_id(course_id),
         })
         .eq("id", post_id)
         .execute()
@@ -1368,7 +1401,10 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         response = (
             supabase
             .table("posts")
-            .select("id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at,is_system_generated,edited_at")
+            .select(
+                "id,user_id,body,photo_url,shared_item_type,shared_item_id,created_at,"
+                "is_system_generated,edited_at,course_id"
+            )
             .in_("user_id", circle_ids)
             .order("created_at", desc=True)
             .limit(fetch_count)
@@ -1401,7 +1437,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
     course_ids = list({
         entry["raw"]["course_id"]
         for entry in page
-        if entry["item_type"] == "round" and entry["raw"].get("course_id")
+        if entry["raw"].get("course_id")
     })
 
     def _fetch_profiles():
@@ -1459,6 +1495,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "course_name": course.get("name") or raw.get("course_name"),
                 "course_photo_url": course.get("photo_url") or course.get("google_photo_url"),
                 "course_phone": course.get("phone_number"),
+                "course_id": raw.get("course_id"),
                 "country_name": raw.get("country_name") or course.get("country_name"),
                 "country_flag_url": raw.get("country_flag_url"),
                 "comment_count": comment_count,
@@ -1472,6 +1509,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 shared_item = _snapshot_item(raw["shared_item_type"], raw["shared_item_id"])
 
             player_name, player_avatar_url = _post_identity(raw, profile_by_user.get(raw["user_id"]))
+            post_course = course_by_id.get(raw.get("course_id"), {})
 
             items.append({
                 "item_type": "post",
@@ -1485,10 +1523,11 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
                 "shared_item": shared_item,
                 "adjusted_gross": None,
                 "stableford_points": None,
-                "course_name": None,
-                "course_photo_url": None,
-                "course_phone": None,
-                "country_name": None,
+                "course_name": post_course.get("name"),
+                "course_photo_url": post_course.get("photo_url") or post_course.get("google_photo_url"),
+                "course_phone": post_course.get("phone_number"),
+                "course_id": raw.get("course_id"),
+                "country_name": post_course.get("country_name"),
                 "country_flag_url": None,
                 "comment_count": comment_count,
                 "reactions": reactions,

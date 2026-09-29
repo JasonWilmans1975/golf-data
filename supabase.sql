@@ -631,3 +631,9 @@ create index if not exists feed_comments_mentioned_user_ids_idx on public.feed_c
 -- linkage between two feed_comments rows.
 alter table if exists public.feed_comments add column if not exists parent_comment_id bigint references public.feed_comments(id) on delete cascade;
 create index if not exists feed_comments_parent_idx on public.feed_comments(parent_comment_id);
+
+-- Facebook Places-style course tagging on a post -- mirrors
+-- handicap_scores.course_id, pointing at the same shared courses table
+-- rounds already use for their course chip.
+alter table if exists public.posts add column if not exists course_id bigint references public.courses(id);
+create index if not exists posts_course_id_idx on public.posts(course_id);

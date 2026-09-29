@@ -59,6 +59,7 @@ type FeedItem = {
     reactions: ReactionSummary;
     is_system_generated: boolean;
     edited_at: string | null;
+    course_id: number | null;
 };
 
 type Comment = {
@@ -77,6 +78,15 @@ type Friend = {
     user_id: string;
     display_name: string;
     avatar_url: string | null;
+};
+
+type CourseSearchResult = {
+    id: number;
+    name: string;
+    city: string | null;
+    country_name: string | null;
+    photo_url: string | null;
+    google_photo_url: string | null;
 };
 
 const EMOJIS = [
@@ -227,6 +237,15 @@ function PeopleIcon() {
             <circle cx="9" cy="7" r="4" />
             <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </Icon>
+    );
+}
+
+function PinIcon() {
+    return (
+        <Icon>
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+            <circle cx="12" cy="10" r="3" />
         </Icon>
     );
 }
@@ -606,8 +625,13 @@ function FeedPage() {
     const [composerOpen, setComposerOpen] = useState(false);
     const [editingPostId, setEditingPostId] = useState<number | null>(null);
     const [postMenuOpen, setPostMenuOpen] = useState<string | null>(null);
-    const [composerView, setComposerView] = useState<"compose" | "tagPeople">("compose");
+    const [composerView, setComposerView] = useState<"compose" | "tagPeople" | "tagCourse">("compose");
     const [tagSearch, setTagSearch] = useState("");
+
+    const [taggedCourse, setTaggedCourse] = useState<{ id: number; name: string } | null>(null);
+    const [courseSearch, setCourseSearch] = useState("");
+    const [courseResults, setCourseResults] = useState<CourseSearchResult[]>([]);
+    const [courseSearchLoading, setCourseSearchLoading] = useState(false);
 
     const commentInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
     const feedCardRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -857,6 +881,30 @@ function FeedPage() {
         };
     }, [myUserId]);
 
+    useEffect(() => {
+        if (composerView !== "tagCourse") return;
+
+        const query = courseSearch.trim();
+        if (query.length < 2) {
+            setCourseResults([]);
+            return;
+        }
+
+        setCourseSearchLoading(true);
+        const debounceTimer = setTimeout(async () => {
+            try {
+                const response = await authFetch(`${API}/courses/search?q=${encodeURIComponent(query)}`);
+                if (response.ok) setCourseResults(await response.json());
+            } catch (error) {
+                console.error(error);
+            } finally {
+                setCourseSearchLoading(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(debounceTimer);
+    }, [composerView, courseSearch]);
+
     function handleDraftChange(key: string, value: string) {
         setDrafts((prev) => ({ ...prev, [key]: value }));
 
@@ -1095,6 +1143,14 @@ function FeedPage() {
         setEmojiPickerOpen(null);
         setComposerView("compose");
         setTagSearch("");
+        setTaggedCourse(null);
+        setCourseSearch("");
+        setCourseResults([]);
+    }
+
+    function selectCourse(course: CourseSearchResult) {
+        setTaggedCourse({ id: course.id, name: course.name });
+        setComposerView("compose");
     }
 
     function isFriendTagged(friend: Friend) {
@@ -1129,7 +1185,12 @@ function FeedPage() {
                 ? await authFetch(`${API}/feed/posts/${editingPostId}`, {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ body, photo_url: postPhotoUrl, mentioned_user_ids: mentionedUserIds }),
+                      body: JSON.stringify({
+                          body,
+                          photo_url: postPhotoUrl,
+                          mentioned_user_ids: mentionedUserIds,
+                          course_id: taggedCourse?.id ?? null,
+                      }),
                   })
                 : await authFetch(`${API}/feed/posts`, {
                       method: "POST",
@@ -1140,6 +1201,7 @@ function FeedPage() {
                           shared_item_type: shareTarget?.item_type ?? null,
                           shared_item_id: shareTarget?.item_id ?? null,
                           mentioned_user_ids: mentionedUserIds,
+                          course_id: taggedCourse?.id ?? null,
                       }),
                   });
 
@@ -1164,6 +1226,7 @@ function FeedPage() {
         setPostPhotoUrl(item.photo_url);
         setShareTarget(null);
         setPostMenuOpen(null);
+        setTaggedCourse(item.course_id ? { id: item.course_id, name: item.course_name || "Course" } : null);
         setComposerOpen(true);
     }
 
@@ -1392,7 +1455,7 @@ function FeedPage() {
                                     />
                                 )}
 
-                                {!item.shared_item && item.item_type === "round" && (
+                                {!item.shared_item && (item.item_type === "round" || item.course_name) && (
                                     <div className="feed-card-body">
                                         <div className="feed-card-course">
                                             {item.country_flag_url && (
@@ -1408,21 +1471,23 @@ function FeedPage() {
                                             {item.course_name || "A round of golf"}
                                         </div>
 
-                                        <div className="feed-card-stats">
-                                            <div>
-                                                <strong>{item.adjusted_gross ?? "—"}</strong>
-                                                <span>Gross</span>
-                                            </div>
+                                        {item.item_type === "round" && (
+                                            <div className="feed-card-stats">
+                                                <div>
+                                                    <strong>{item.adjusted_gross ?? "—"}</strong>
+                                                    <span>Gross</span>
+                                                </div>
 
-                                            <div>
-                                                <strong>{item.stableford_points ?? "—"}</strong>
-                                                <span>Stableford</span>
+                                                <div>
+                                                    <strong>{item.stableford_points ?? "—"}</strong>
+                                                    <span>Stableford</span>
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 )}
 
-                                {!item.shared_item && item.item_type === "round" && item.course_phone && (
+                                {!item.shared_item && item.course_phone && (
                                     <a className="book-round-button" href={`tel:${item.course_phone}`}>
                                         📞 Book a round
                                     </a>
@@ -1667,6 +1732,26 @@ function FeedPage() {
                                     return taggedCount > 0 ? `${taggedCount} tagged` : "Tag people";
                                 })()}
                             </button>
+
+                            <button
+                                type="button"
+                                className="post-composer-pill"
+                                onClick={() => setComposerView("tagCourse")}
+                            >
+                                <PinIcon />
+                                {taggedCourse ? taggedCourse.name : "Tag a course"}
+                            </button>
+
+                            {taggedCourse && (
+                                <button
+                                    type="button"
+                                    className="post-composer-pill post-composer-pill-remove"
+                                    onClick={() => setTaggedCourse(null)}
+                                    aria-label="Remove tagged course"
+                                >
+                                    ✕
+                                </button>
+                            )}
                         </div>
 
                         <form id="post-composer-form" className="post-composer-form" onSubmit={handleSubmitPost}>
@@ -1826,6 +1911,89 @@ function FeedPage() {
                             {friends.length === 0 && (
                                 <p className="course-count" style={{ padding: 16 }}>
                                     Add some friends first to tag them in a post.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {composerOpen && composerView === "tagCourse" && (
+                <div className="modal-overlay post-composer-overlay" onClick={() => setComposerView("compose")}>
+                    <div className="modal-card post-composer-card" onClick={(event) => event.stopPropagation()}>
+                        <div className="post-composer-topbar">
+                            <button
+                                type="button"
+                                className="post-composer-cancel"
+                                onClick={() => setComposerView("compose")}
+                                aria-label="Back"
+                            >
+                                ✕
+                            </button>
+
+                            <strong>Tag a course</strong>
+
+                            <button
+                                type="button"
+                                className="post-composer-cancel post-composer-done"
+                                onClick={() => setComposerView("compose")}
+                            >
+                                Done
+                            </button>
+                        </div>
+
+                        <div className="post-composer-tag-search">
+                            <input
+                                className="settings-input"
+                                placeholder="Search for a golf course"
+                                value={courseSearch}
+                                onChange={(event) => setCourseSearch(event.target.value)}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="post-composer-tag-list">
+                            {courseSearchLoading && (
+                                <p className="course-count" style={{ padding: 16 }}>
+                                    Searching...
+                                </p>
+                            )}
+
+                            {!courseSearchLoading &&
+                                courseResults.map((course) => (
+                                    <button
+                                        type="button"
+                                        key={course.id}
+                                        className="post-composer-tag-row"
+                                        onClick={() => selectCourse(course)}
+                                    >
+                                        <PinIcon />
+                                        <span>
+                                            {course.name}
+                                            {course.city && (
+                                                <span className="post-composer-course-location">
+                                                    {" "}
+                                                    &middot; {course.city}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span
+                                            className={`post-composer-tag-check${
+                                                taggedCourse?.id === course.id ? " checked" : ""
+                                            }`}
+                                        />
+                                    </button>
+                                ))}
+
+                            {!courseSearchLoading && courseSearch.trim().length >= 2 && courseResults.length === 0 && (
+                                <p className="course-count" style={{ padding: 16 }}>
+                                    No courses found for "{courseSearch.trim()}".
+                                </p>
+                            )}
+
+                            {courseSearch.trim().length < 2 && (
+                                <p className="course-count" style={{ padding: 16 }}>
+                                    Type at least 2 characters to search.
                                 </p>
                             )}
                         </div>

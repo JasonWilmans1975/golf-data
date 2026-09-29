@@ -18,6 +18,7 @@ from .courses import (
     backfill_country_info,
     backfill_course_details,
     get_countries_played,
+    search_courses_by_name,
 )
 from .handicap import (
     sync_handicap_data,
@@ -248,6 +249,11 @@ def courses(user_id: str = Depends(get_current_user_id)):
 @app.get("/courses/countries")
 def courses_countries(user_id: str = Depends(get_current_user_id)):
     return get_countries_played(user_id)
+
+
+@app.get("/courses/search")
+def courses_search(q: str = "", user_id: str = Depends(get_current_user_id)):
+    return search_courses_by_name(q)
 
 
 @app.post("/courses/{course_id}/merge")
@@ -746,6 +752,7 @@ class PostBody(BaseModel):
     shared_item_id: int | None = None
     photo_url: str | None = None
     mentioned_user_ids: list[str] = []
+    course_id: int | None = None
 
 
 @app.post("/feed/posts")
@@ -758,6 +765,7 @@ def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)
             body.shared_item_id,
             body.photo_url,
             mentioned_user_ids=body.mentioned_user_ids,
+            course_id=body.course_id,
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
@@ -767,12 +775,15 @@ class PostEditBody(BaseModel):
     body: str = ""
     photo_url: str | None = None
     mentioned_user_ids: list[str] = []
+    course_id: int | None = None
 
 
 @app.put("/feed/posts/{post_id}")
 def feed_update_post(post_id: int, body: PostEditBody, user_id: str = Depends(get_current_user_id)):
     try:
-        return update_post(user_id, post_id, body.body, body.photo_url, body.mentioned_user_ids)
+        return update_post(
+            user_id, post_id, body.body, body.photo_url, body.mentioned_user_ids, body.course_id
+        )
     except ValueError as exc:
         raise HTTPException(404 if str(exc) == "Post not found" else 400, detail=str(exc))
 

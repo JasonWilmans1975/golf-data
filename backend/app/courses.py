@@ -615,6 +615,30 @@ def get_courses_for_user(user_id: str):
     ]
 
 
+def search_courses_by_name(query: str, limit: int = 10) -> list[dict]:
+    """Interactive tag-search for the post composer's course picker --
+    unlike get_courses_for_user (played-only) this searches the whole
+    shared courses table, and unlike find_course_by_name (a Google Places
+    API call, meant for automatic detection from a GPS-tagged round) this
+    is a single fast local query, cheap enough to call on every keystroke."""
+    query = query.strip()
+
+    if len(query) < 2:
+        return []
+
+    response = (
+        supabase
+        .table("courses")
+        .select("id,name,city,country_name,photo_url,google_photo_url")
+        .ilike("name", f"%{query}%")
+        .order("name")
+        .limit(limit)
+        .execute()
+    )
+
+    return response.data or []
+
+
 def merge_courses(source_id: int, target_id: int):
     if source_id == target_id:
         raise ValueError("Cannot merge a course into itself")
