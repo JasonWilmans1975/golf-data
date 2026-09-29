@@ -5,7 +5,19 @@ export const API = import.meta.env.VITE_API_URL as string;
 
 export async function authFetch(url: string, options: RequestInit = {}) {
     const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
+    let token = data.session?.access_token;
+
+    // Right after a hard page refresh, the Supabase client can still be
+    // mid-restore from storage -- a getSession() call fired at just the
+    // wrong moment can come back empty even though a valid session is about
+    // to load, sending a request with no Authorization header at all
+    // ("Missing bearer token") instead of the usual "expired" case the
+    // retry below already handles. One more read a tick later is enough to
+    // let that restore finish before giving up.
+    if (!token) {
+        const { data: retried } = await supabase.auth.getSession();
+        token = retried.session?.access_token;
+    }
 
     const response = await fetch(url, {
         ...options,
