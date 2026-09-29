@@ -8,7 +8,7 @@ from supabase import create_client, ClientOptions
 from .config import settings
 
 
-def _build_client():
+def _new_httpx_client():
     # Supabase's edge (Cloudflare) can close a pooled HTTP/2 connection at
     # the exact moment a client tries to reuse it for a new request, causing
     # httpx.RemoteProtocolError (a known race, not specific to this app —
@@ -17,15 +17,17 @@ def _build_client():
     # connection, which avoids the race at the cost of a slightly slower
     # per-request handshake — an acceptable tradeoff for this app's traffic
     # volume.
-    httpx_client = httpx.Client(
+    return httpx.Client(
         limits=httpx.Limits(max_keepalive_connections=0),
         timeout=30,
     )
 
+
+def _build_client():
     return create_client(
         settings.supabase_url,
         settings.supabase_service_role_key,
-        options=ClientOptions(httpx_client=httpx_client),
+        options=ClientOptions(httpx_client=_new_httpx_client()),
     )
 
 
@@ -34,25 +36,42 @@ _local = threading.local()
 
 class _ThreadLocalSupabase:
     """Stands in for a single shared Client, but every attribute access
-    (.table(...), .storage, .auth, ...) is routed to a Client private to the
-    calling thread instead.
+    (.table(...), .storage, ...) is routed to a Client private to the
+    calling thread instead -- and .table()/.storage are further routed to
+    TWO SEPARATE underlying Client instances per thread (see below).
 
-    supabase-py's postgrest and storage sub-clients share ONE underlying
-    httpx.Client, and each temporarily overwrites its .base_url before
-    sending a request -- harmless single-threaded, but this app runs every
-    request on its own thread (FastAPI's default for a sync `def` route)
-    plus background-thread syncs. Sharing one Client across threads meant a
-    photo upload's storage call could flip base_url out from under a
-    completely unrelated table query running on another thread at the exact
-    same moment, sending it to /storage/v1/ instead of /rest/v1/ and back a
-    genuinely random "Route not found" 404 -- confirmed directly: a single
-    storage call permanently flips the shared client's base_url from
-    .../rest/v1/ to .../storage/v1/, with no thread-safety anywhere in
-    between. This produced exactly the intermittent, any-table 500s seen in
-    production, independent of Supabase's own compute tier.
+    Why two clients, not one: supabase-py's postgrest and storage
+    sub-clients each get their OWN httpx.Client's .base_url set exactly
+    once, the first time that sub-client is lazily constructed (accessing
+    .postgrest sets it to .../rest/v1/, accessing .storage sets it to
+    .../storage/v1/) -- and if ClientOptions(httpx_client=...) hands both
+    sub-clients the SAME underlying httpx.Client (as a single create_client()
+    call does), whichever one is constructed *second* permanently overwrites
+    that shared base_url for the OTHER sub-client too, since nothing ever
+    resets it again afterward. On a long-lived worker thread that's already
+    made ordinary table() calls (constructing .postgrest first) and later
+    handles its first-ever photo/story upload (constructing .storage
+    second), every table() call on that thread breaks permanently from that
+    point on -- confirmed directly: .table() succeeds, .storage.from_(...)
+    is touched once, and the exact same .table() call then 404s with
+    "Route not found", routed to /storage/v1/ instead of /rest/v1/, for the
+    rest of that client instance's life (an earlier, first-cut version of
+    this file gave each THREAD its own client to fix a *cross-thread*
+    version of this same base_url collision, but that alone doesn't stop
+    this *same-thread* one -- postgrest and storage still needed fully
+    separate httpx.Client instances, not just a separate Client per thread).
     """
 
     def __getattr__(self, name):
+        if name == "storage":
+            client = getattr(_local, "storage_client", None)
+
+            if client is None:
+                client = _build_client()
+                _local.storage_client = client
+
+            return client.storage
+
         client = getattr(_local, "client", None)
 
         if client is None:

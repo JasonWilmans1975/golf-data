@@ -36,12 +36,11 @@ def get_credentials_status(user_id: str) -> dict | None:
 
 
 def _get_credentials(user_id: str):
-    response = (
-        supabase
+    response = execute_with_retry(
+        lambda: supabase
         .table("teesheet_credentials")
         .select("club_id,club_name,member_id,encrypted_password")
         .eq("user_id", user_id)
-        .execute()
     )
 
     if not response.data:
