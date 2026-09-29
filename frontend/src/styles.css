@@ -3111,6 +3111,24 @@ button {
     overflow-y: auto;
 }
 
+.auth-section-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 16px 0 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.auth-section-heading strong {
+    font-size: 13px;
+}
+
+.auth-section-heading span {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
 .auth-checkbox-label {
     display: flex;
     align-items: flex-start;

@@ -28,6 +28,8 @@ function LoginPage() {
     const [dateOfBirth, setDateOfBirth] = useState("");
     const [sex, setSex] = useState("");
     const [displayPreference, setDisplayPreference] = useState<"name" | "nickname">("name");
+    const [handicapMemberNo, setHandicapMemberNo] = useState("");
+    const [handicapPassword, setHandicapPassword] = useState("");
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [newsletterOptIn, setNewsletterOptIn] = useState(false);
     const [sponsorOptIn, setSponsorOptIn] = useState(false);
@@ -79,6 +81,19 @@ function LoginPage() {
                 });
 
                 if (error) throw error;
+
+                // Email confirmation is required before there's an active
+                // session, so credentials can't be saved via the backend
+                // right now -- stash them for RequireAuth to pick up and
+                // save/sync automatically the moment this account first
+                // signs in (see App.tsx). Cleared there whether or not it
+                // succeeds, so nothing lingers past that first sign-in.
+                if (handicapMemberNo.trim() && handicapPassword) {
+                    sessionStorage.setItem(
+                        "pending_handicap_credentials",
+                        JSON.stringify({ member_no: handicapMemberNo.trim(), password: handicapPassword })
+                    );
+                }
 
                 setSignupDone(true);
             }
@@ -259,6 +274,30 @@ function LoginPage() {
                                         <option value="other">Other</option>
                                         <option value="prefer_not_to_say">Prefer not to say</option>
                                     </select>
+                                </label>
+
+                                <div className="auth-section-heading">
+                                    <strong>Handicaps.co.za</strong>
+                                    <span>Optional — connects your official handicap and round history. You can add this later in Settings instead.</span>
+                                </div>
+
+                                <label className="settings-label">
+                                    Member number
+                                    <input
+                                        className="settings-input"
+                                        value={handicapMemberNo}
+                                        onChange={(event) => setHandicapMemberNo(event.target.value)}
+                                    />
+                                </label>
+
+                                <label className="settings-label">
+                                    Handicaps.co.za password
+                                    <input
+                                        className="settings-input"
+                                        type="password"
+                                        value={handicapPassword}
+                                        onChange={(event) => setHandicapPassword(event.target.value)}
+                                    />
                                 </label>
 
                                 <label className="auth-checkbox-label">

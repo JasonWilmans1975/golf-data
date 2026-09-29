@@ -992,6 +992,38 @@ function CourseDetail() {
 function RequireAuth({ children }: { children: ReactNode }) {
     const { session, loading } = useAuth();
 
+    useEffect(() => {
+        if (!session) return;
+
+        // A new account may have entered handicaps.co.za credentials at
+        // signup, before email confirmation existed as a session to save
+        // them against (see LoginPage.tsx). Picked up and cleared here, on
+        // this account's first authenticated request after confirming --
+        // cleared unconditionally so a bad password never turns into a
+        // silent retry loop on every future sign-in.
+        const pending = sessionStorage.getItem("pending_handicap_credentials");
+        if (!pending) return;
+
+        sessionStorage.removeItem("pending_handicap_credentials");
+
+        (async () => {
+            try {
+                const response = await authFetch(`${API}/handicap/credentials`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: pending,
+                });
+
+                if (response.ok) {
+                    await authFetch(`${API}/handicap/sync?force=true&full_resync=true`, { method: "POST" });
+                }
+            } catch {
+                // Nothing to show yet -- Settings still lets them connect
+                // manually if this silently failed (bad password, etc).
+            }
+        })();
+    }, [session]);
+
     if (loading) {
         return <div className="loading-card">Loading...</div>;
     }
