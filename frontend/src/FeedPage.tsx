@@ -1366,17 +1366,17 @@ function FeedPage() {
                                         onShowDetails={openReactionDetails}
                                     />
 
-                                    <button
-                                        type="button"
-                                        className="feed-action-button"
-                                        aria-label="Comment"
-                                        onClick={() => focusCommentInput(key)}
-                                    >
-                                        <MessageIcon />
-                                        {item.comment_count > 0 && (
+                                    {item.comment_count > 0 && (
+                                        <button
+                                            type="button"
+                                            className="feed-action-button"
+                                            aria-label="Comment"
+                                            onClick={() => focusCommentInput(key)}
+                                        >
+                                            <MessageIcon />
                                             <span className="feed-action-count">{item.comment_count}</span>
-                                        )}
-                                    </button>
+                                        </button>
+                                    )}
 
                                     <div className="feed-share-wrap">
                                         <button
