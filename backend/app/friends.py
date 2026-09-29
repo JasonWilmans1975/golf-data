@@ -176,69 +176,49 @@ def search_users(user_id: str, query: str, limit: int = 20) -> list[dict]:
     ]
 
 
-def get_teesheet_buddy_suggestions(user_id: str) -> list[dict]:
-    """Cross-references your teesheet.co.za Buddy List (frequent playing
-    partners, a real feature there) against other GolfCircle users' own
-    teesheet credentials -- same club, matching member number -- to surface
-    people you already golf with as friend suggestions."""
-    my_credentials = (
-        supabase
-        .table("teesheet_credentials")
-        .select("club_id")
-        .eq("user_id", user_id)
-        .limit(1)
-        .execute()
-    )
-
-    if not my_credentials.data:
-        return []
-
-    club_id = my_credentials.data[0]["club_id"]
-
-    buddy_rows = (
-        supabase
-        .table("teesheet_buddies")
-        .select("buddy_member_no")
-        .eq("user_id", user_id)
-        .execute()
-    )
-    buddy_member_nos = [row["buddy_member_no"] for row in buddy_rows.data or []]
-
+def auto_friend_teesheet_buddies(user_id: str, club_id: int, buddy_member_nos: list[str]) -> int:
+    """Teesheet buddies are real-world frequent playing partners -- if one is
+    also a GolfCircle user at the same club, connect them directly rather
+    than waiting for either person to notice and add the other. Returns how
+    many new connections were made."""
     if not buddy_member_nos:
-        return []
+        return 0
 
     matches_response = (
         supabase
         .table("teesheet_credentials")
-        .select("user_id,member_id")
+        .select("user_id")
         .eq("club_id", club_id)
-        .in_("member_id", buddy_member_nos)
+        .in_("club_number", buddy_member_nos)
         .neq("user_id", user_id)
         .execute()
     )
     matched_user_ids = [row["user_id"] for row in matches_response.data or []]
 
-    if not matched_user_ids:
-        return []
+    connected = 0
 
-    profiles_response = (
-        supabase
-        .table("profiles")
-        .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
-        .in_("user_id", matched_user_ids)
-        .execute()
-    )
-    status_by_other = _relationship_status_map(user_id)
+    for other_id in matched_user_ids:
+        existing = _find_relationship(user_id, other_id)
 
-    return [
-        {
-            "user_id": row["user_id"],
-            "display_name": _display_name(row),
-            "avatar_url": _avatar_url(row),
-            "relationship": status_by_other.get(row["user_id"], "none"),
-        }
-        for row in profiles_response.data or []
-    ]
+        if existing and existing["status"] in ("accepted", "declined"):
+            # Already friends, or someone explicitly declined before --
+            # never override a real decision either way.
+            continue
+
+        if existing and existing["status"] == "pending":
+            supabase.table("friend_requests").update(
+                {"status": "accepted", "updated_at": _now()}
+            ).eq("id", existing["id"]).execute()
+        else:
+            supabase.table("friend_requests").insert({
+                "from_user_id": user_id,
+                "to_user_id": other_id,
+                "status": "accepted",
+            }).execute()
+
+        connected += 1
+
+    return connected
 
 
 def _send_friend_request_to(user_id: str, target_id: str) -> dict:

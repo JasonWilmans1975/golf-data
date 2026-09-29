@@ -602,3 +602,11 @@ create table if not exists public.teesheet_buddies (
 
 create index if not exists teesheet_buddies_user_id_idx on public.teesheet_buddies(user_id);
 create index if not exists teesheet_buddies_member_no_idx on public.teesheet_buddies(buddy_member_no);
+
+-- teesheet_credentials.member_id is the LOGIN identifier (varies by club --
+-- sometimes an ID number, sometimes a SAGA number), but the Buddy List
+-- table identifies people by a completely different "Club Number" shown on
+-- the member's own Registration Information page. Matching buddies against
+-- member_id would never find anyone -- this is the field that actually
+-- corresponds to teesheet_buddies.buddy_member_no.
+alter table if exists public.teesheet_credentials add column if not exists club_number text;

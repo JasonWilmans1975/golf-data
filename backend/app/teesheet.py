@@ -7,6 +7,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .db import supabase
 from .crypto import encrypt, decrypt
+from .friends import auto_friend_teesheet_buddies
 
 TEESHEET_BASE_URL = "https://www.teesheet.co.za"
 
@@ -259,6 +260,32 @@ def _parse_buddy_list(html: str) -> list[dict]:
     return buddies
 
 
+def _parse_club_number(html: str) -> str | None:
+    """The member's own "Club Number" from the Registration Information page
+    shown right after login -- this is what the Buddy List's "Number" column
+    actually refers to, not the login member_id (which is a different
+    identifier -- an ID number or SAGA number depending on the club)."""
+    soup = BeautifulSoup(html, "html.parser")
+
+    for table in soup.find_all("table", id="bodytable"):
+        header = table.find("th")
+
+        if not header or header.get_text(strip=True).lower() != "club number":
+            continue
+
+        rows = table.find_all("tr")
+
+        if len(rows) < 2:
+            continue
+
+        cell = rows[1].find("td")
+
+        if cell:
+            return cell.get_text(strip=True) or None
+
+    return None
+
+
 def _already_synced_today(user_id: str) -> bool:
     state = (
         supabase
@@ -297,6 +324,9 @@ async def sync_teesheet_data(user_id: str, force: bool = False) -> dict:
         try:
             await _login(page, club_id, member_id, password)
 
+            registration_html = await page.eval_on_selector("#MainPage", "el => el.innerHTML")
+            club_number = _parse_club_number(registration_html)
+
             future_html = await _load_menu_page(page, "List All Future Bookings")
             bookings = _parse_future_bookings(future_html)
 
@@ -310,10 +340,19 @@ async def sync_teesheet_data(user_id: str, force: bool = False) -> dict:
         finally:
             await browser.close()
 
-    return await run_in_threadpool(_store_teesheet_sync, user_id, bookings, txn_data, buddies)
+    return await run_in_threadpool(
+        _store_teesheet_sync, user_id, club_id, club_number, bookings, txn_data, buddies
+    )
 
 
-def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict, buddies: list) -> dict:
+def _store_teesheet_sync(
+    user_id: str, club_id: int, club_number: str | None, bookings: list, txn_data: dict, buddies: list
+) -> dict:
+    if club_number:
+        supabase.table("teesheet_credentials").update(
+            {"club_number": club_number}
+        ).eq("user_id", user_id).execute()
+
     # Postgres's ON CONFLICT DO UPDATE fails outright ("cannot affect row a
     # second time") if two rows in the *same* upsert batch share a conflict
     # key -- seen for real when the scraped statement repeated a doc_number.
@@ -349,6 +388,10 @@ def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict, buddies: 
             [{**b, "user_id": user_id} for b in buddies]
         ).execute()
 
+    friends_connected = auto_friend_teesheet_buddies(
+        user_id, club_id, [b["buddy_member_no"] for b in buddies]
+    )
+
     _mark_synced_now(user_id, txn_data["balance"])
 
     return {
@@ -356,5 +399,6 @@ def _store_teesheet_sync(user_id: str, bookings: list, txn_data: dict, buddies: 
         "bookings_synced": len(bookings),
         "transactions_synced": len(txn_data["transactions"]),
         "buddies_synced": len(buddies),
+        "friends_connected": friends_connected,
         "balance": txn_data["balance"],
     }
