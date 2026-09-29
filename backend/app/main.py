@@ -745,13 +745,19 @@ class PostBody(BaseModel):
     shared_item_type: str | None = None
     shared_item_id: int | None = None
     photo_url: str | None = None
+    mentioned_user_ids: list[str] = []
 
 
 @app.post("/feed/posts")
 def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)):
     try:
         return create_post(
-            user_id, body.body, body.shared_item_type, body.shared_item_id, body.photo_url
+            user_id,
+            body.body,
+            body.shared_item_type,
+            body.shared_item_id,
+            body.photo_url,
+            mentioned_user_ids=body.mentioned_user_ids,
         )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
@@ -760,12 +766,13 @@ def feed_create_post(body: PostBody, user_id: str = Depends(get_current_user_id)
 class PostEditBody(BaseModel):
     body: str = ""
     photo_url: str | None = None
+    mentioned_user_ids: list[str] = []
 
 
 @app.put("/feed/posts/{post_id}")
 def feed_update_post(post_id: int, body: PostEditBody, user_id: str = Depends(get_current_user_id)):
     try:
-        return update_post(user_id, post_id, body.body, body.photo_url)
+        return update_post(user_id, post_id, body.body, body.photo_url, body.mentioned_user_ids)
     except ValueError as exc:
         raise HTTPException(404 if str(exc) == "Post not found" else 400, detail=str(exc))
 
@@ -826,6 +833,7 @@ def feed_comments_batch(body: CommentBatchBody, user_id: str = Depends(get_curre
 
 class CommentBody(BaseModel):
     body: str
+    mentioned_user_ids: list[str] = []
 
 
 @app.post("/feed/{item_type}/{item_id}/comments")
@@ -833,7 +841,7 @@ def feed_comments_create(
     item_type: str, item_id: int, body: CommentBody, user_id: str = Depends(get_current_user_id)
 ):
     try:
-        return add_comment(user_id, item_type, item_id, body.body)
+        return add_comment(user_id, item_type, item_id, body.body, body.mentioned_user_ids)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
 

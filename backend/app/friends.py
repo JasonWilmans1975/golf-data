@@ -990,6 +990,24 @@ def get_friends_feed(user_id: str, limit: int = 30) -> list[dict]:
     return _build_rounds_feed(user_id, friend_ids, limit)
 
 
+def _validate_mentions(user_id: str, candidate_ids: list[str] | None) -> list[str]:
+    """Structured @mentions can only tag friends (mirrors who the composer's
+    tag-picker actually shows) -- dedupes and silently drops anything else
+    rather than erroring, since the composer is the only caller and a stray
+    id there is a client bug, not something the user needs to explain."""
+    if not candidate_ids:
+        return []
+
+    friend_ids = set(list_friend_ids(user_id))
+    seen: list[str] = []
+
+    for candidate in candidate_ids:
+        if candidate in friend_ids and candidate not in seen:
+            seen.append(candidate)
+
+    return seen
+
+
 def create_post(
     user_id: str,
     body: str,
@@ -997,6 +1015,7 @@ def create_post(
     shared_item_id: int | None = None,
     photo_url: str | None = None,
     is_system_generated: bool = False,
+    mentioned_user_ids: list[str] | None = None,
 ) -> dict:
     """user_id still owns the post for visibility/permission purposes (whose
     circle sees it, who can comment) -- is_system_generated only changes how
@@ -1012,7 +1031,13 @@ def create_post(
     if len(body) > 2000:
         raise ValueError("Post is too long")
 
-    row = {"user_id": user_id, "body": body, "photo_url": photo_url, "is_system_generated": is_system_generated}
+    row = {
+        "user_id": user_id,
+        "body": body,
+        "photo_url": photo_url,
+        "is_system_generated": is_system_generated,
+        "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
+    }
 
     if shared_item_type and shared_item_id:
         if shared_item_type not in ("round", "post"):
@@ -1031,7 +1056,9 @@ def create_post(
     return response.data[0]
 
 
-def update_post(user_id: str, post_id: int, body: str, photo_url: str | None) -> dict:
+def update_post(
+    user_id: str, post_id: int, body: str, photo_url: str | None, mentioned_user_ids: list[str] | None = None
+) -> dict:
     existing = supabase.table("posts").select("id,user_id").eq("id", post_id).limit(1).execute()
 
     if not existing.data:
@@ -1051,7 +1078,12 @@ def update_post(user_id: str, post_id: int, body: str, photo_url: str | None) ->
     response = (
         supabase
         .table("posts")
-        .update({"body": body, "photo_url": photo_url, "edited_at": _now()})
+        .update({
+            "body": body,
+            "photo_url": photo_url,
+            "edited_at": _now(),
+            "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
+        })
         .eq("id", post_id)
         .execute()
     )
@@ -1427,7 +1459,9 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
     return {"items": items, "comments": comments_by_key}
 
 
-def add_comment(user_id: str, item_type: str, item_id: int, body: str) -> dict:
+def add_comment(
+    user_id: str, item_type: str, item_id: int, body: str, mentioned_user_ids: list[str] | None = None
+) -> dict:
     body = body.strip()
 
     if not body:
@@ -1444,7 +1478,13 @@ def add_comment(user_id: str, item_type: str, item_id: int, body: str) -> dict:
     response = (
         supabase
         .table("feed_comments")
-        .insert({"item_type": item_type, "item_id": item_id, "user_id": user_id, "body": body})
+        .insert({
+            "item_type": item_type,
+            "item_id": item_id,
+            "user_id": user_id,
+            "body": body,
+            "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
+        })
         .execute()
     )
 
@@ -1503,7 +1543,6 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
     frontend can jump straight to it."""
     profile = _get_profile_row(user_id)
     checked_at = profile.get("notifications_checked_at") or "1970-01-01T00:00:00Z"
-    display_name = _display_name(profile)
     my_items = _my_item_ids(user_id)
 
     raw: list[dict] = []
@@ -1577,7 +1616,7 @@ def list_notifications(user_id: str, limit: int = 20) -> list[dict]:
             supabase
             .table(table)
             .select("id,user_id,created_at")
-            .ilike("body", f"%@{display_name}%")
+            .contains("mentioned_user_ids", [user_id])
             .neq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)

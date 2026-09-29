@@ -610,3 +610,15 @@ create index if not exists teesheet_buddies_member_no_idx on public.teesheet_bud
 -- member_id would never find anyone -- this is the field that actually
 -- corresponds to teesheet_buddies.buddy_member_no.
 alter table if exists public.teesheet_credentials add column if not exists club_number text;
+
+-- Structured @mentions (which friend user_ids are tagged in a post/comment),
+-- replacing a fragile plain-text substring match against the viewer's own
+-- display name (broke on shared/changed display names). A column rather
+-- than a join table, matching this codebase's existing preference for
+-- collapsing small relations (e.g. friend_requests doubling as the
+-- friendship table) -- fine at this scale, revisit if it ever needs
+-- per-mention read state.
+alter table if exists public.posts add column if not exists mentioned_user_ids uuid[] not null default '{}';
+alter table if exists public.feed_comments add column if not exists mentioned_user_ids uuid[] not null default '{}';
+create index if not exists posts_mentioned_user_ids_idx on public.posts using gin (mentioned_user_ids);
+create index if not exists feed_comments_mentioned_user_ids_idx on public.feed_comments using gin (mentioned_user_ids);

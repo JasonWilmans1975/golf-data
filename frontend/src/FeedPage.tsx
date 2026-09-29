@@ -862,6 +862,26 @@ function FeedPage() {
             .slice(0, 5);
     }
 
+    // Both the inline "@Name" autocomplete and the "Tag people" pill flow
+    // insert the same plain-text "@DisplayName" token into the draft -- so
+    // rather than tracking a separate id set that could drift out of sync
+    // with manual text edits (e.g. the user backspacing over a tag), the
+    // structured mentioned_user_ids sent to the backend are derived straight
+    // from whichever friend tokens are actually still present in the body
+    // at submit time. Two friends sharing a display name both match, which
+    // is the safe direction to err in (over-notify, never silently miss).
+    function deriveMentionedUserIds(text: string): string[] {
+        const ids: string[] = [];
+
+        for (const friend of friends) {
+            const escaped = friend.display_name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const pattern = new RegExp(`(^|\\W)@${escaped}(?=\\W|$)`);
+            if (pattern.test(text)) ids.push(friend.user_id);
+        }
+
+        return ids;
+    }
+
     function selectMention(key: string, name: string) {
         setDrafts((prev) => ({
             ...prev,
@@ -895,7 +915,7 @@ function FeedPage() {
             const response = await authFetch(`${API}/feed/${itemType}/${itemId}/comments`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ body }),
+                body: JSON.stringify({ body, mentioned_user_ids: deriveMentionedUserIds(body) }),
             });
 
             if (response.ok) {
@@ -1071,11 +1091,13 @@ function FeedPage() {
         setPosting((prev) => new Set(prev).add(NEW_POST_KEY));
 
         try {
+            const mentionedUserIds = deriveMentionedUserIds(body);
+
             const response = editingPostId
                 ? await authFetch(`${API}/feed/posts/${editingPostId}`, {
                       method: "PUT",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ body, photo_url: postPhotoUrl }),
+                      body: JSON.stringify({ body, photo_url: postPhotoUrl, mentioned_user_ids: mentionedUserIds }),
                   })
                 : await authFetch(`${API}/feed/posts`, {
                       method: "POST",
@@ -1085,6 +1107,7 @@ function FeedPage() {
                           photo_url: postPhotoUrl,
                           shared_item_type: shareTarget?.item_type ?? null,
                           shared_item_id: shareTarget?.item_id ?? null,
+                          mentioned_user_ids: mentionedUserIds,
                       }),
                   });
 
