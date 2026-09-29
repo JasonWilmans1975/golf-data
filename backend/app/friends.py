@@ -1127,6 +1127,35 @@ def _can_view_item(viewer_id: str, owner_id: str) -> bool:
     return owner_id in list_friend_ids(viewer_id)
 
 
+def _group_comments_by_thread(rows: list[dict]) -> list[dict]:
+    """Flat, created_at-ascending comment dicts (each already carrying a
+    "replies": [] slot) -> top-level comments with their single-level
+    replies nested inline. Relies on a reply always sorting after its
+    parent (parent creation necessarily precedes the reply) and on
+    add_comment enforcing replies can't themselves have a parent, so no
+    row is ever more than one level deep."""
+    by_id: dict[int, dict] = {}
+    top_level: list[dict] = []
+
+    for row in rows:
+        by_id[row["id"]] = row
+        parent_id = row.get("parent_comment_id")
+
+        if parent_id and parent_id in by_id:
+            by_id[parent_id]["replies"].append(row)
+        else:
+            top_level.append(row)
+
+    return top_level
+
+
+def _total_comment_count(threaded: list[dict]) -> int:
+    """Comment badge count should include replies, not just top-level
+    comments -- threaded is list_comments'/_fetch_comments_for_pairs'
+    output shape (top-level comments each carrying a "replies" list)."""
+    return sum(1 + len(comment.get("replies", [])) for comment in threaded)
+
+
 def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
     owner_id = _item_owner(item_type, item_id)
 
@@ -1136,7 +1165,7 @@ def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
     response = (
         supabase
         .table("feed_comments")
-        .select("id,user_id,body,created_at")
+        .select("id,user_id,body,created_at,parent_comment_id")
         .eq("item_type", item_type)
         .eq("item_id", item_id)
         .order("created_at")
@@ -1157,7 +1186,7 @@ def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
     profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
     reactions_by_comment = _reaction_summary(user_id, [("comment", comment["id"]) for comment in comments])
 
-    return [
+    flat = [
         {
             "id": comment["id"],
             "user_id": comment["user_id"],
@@ -1165,10 +1194,14 @@ def list_comments(user_id: str, item_type: str, item_id: int) -> list[dict]:
             "author_avatar_url": _avatar_url(profile_by_user.get(comment["user_id"])),
             "body": comment["body"],
             "created_at": comment["created_at"],
+            "parent_comment_id": comment.get("parent_comment_id"),
             "reactions": reactions_by_comment.get(("comment", comment["id"]), _empty_reactions()),
+            "replies": [],
         }
         for comment in comments
     ]
+
+    return _group_comments_by_thread(flat)
 
 
 def list_comments_batch(user_id: str, items: list[tuple[str, int]]) -> dict[str, list[dict]]:
@@ -1245,7 +1278,7 @@ def _fetch_comments_for_pairs(
     response = (
         supabase
         .table("feed_comments")
-        .select("id,item_type,item_id,user_id,body,created_at")
+        .select("id,item_type,item_id,user_id,body,created_at,parent_comment_id")
         .in_("item_type", allowed_types)
         .in_("item_id", allowed_ids)
         .order("created_at")
@@ -1272,17 +1305,24 @@ def _fetch_comments_for_pairs(
         profile_by_user = profiles_future.result()
         reactions_by_comment = reactions_future.result()
 
+    flat_by_key: dict[str, list[dict]] = {}
+
     for row in rows:
         key = f"{row['item_type']}:{row['item_id']}"
-        grouped.setdefault(key, []).append({
+        flat_by_key.setdefault(key, []).append({
             "id": row["id"],
             "user_id": row["user_id"],
             "author_name": _display_name(profile_by_user.get(row["user_id"])),
             "author_avatar_url": _avatar_url(profile_by_user.get(row["user_id"])),
             "body": row["body"],
             "created_at": row["created_at"],
+            "parent_comment_id": row.get("parent_comment_id"),
             "reactions": reactions_by_comment.get(("comment", row["id"]), _empty_reactions()),
+            "replies": [],
         })
+
+    for key, flat in flat_by_key.items():
+        grouped[key] = _group_comments_by_thread(flat)
 
     return grouped
 
@@ -1399,7 +1439,7 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         item_type = entry["item_type"]
         item_id = entry["item_id"]
         key = f"{item_type}:{item_id}"
-        comment_count = len(comments_by_key.get(key, []))
+        comment_count = _total_comment_count(comments_by_key.get(key, []))
         reactions = reactions_by_item.get((item_type, item_id), _empty_reactions())
 
         if item_type == "round":
@@ -1460,7 +1500,12 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
 
 
 def add_comment(
-    user_id: str, item_type: str, item_id: int, body: str, mentioned_user_ids: list[str] | None = None
+    user_id: str,
+    item_type: str,
+    item_id: int,
+    body: str,
+    mentioned_user_ids: list[str] | None = None,
+    parent_comment_id: int | None = None,
 ) -> dict:
     body = body.strip()
 
@@ -1475,6 +1520,28 @@ def add_comment(
     if owner_id is None or not _can_view_item(user_id, owner_id):
         raise ValueError("Not found")
 
+    if parent_comment_id is not None:
+        parent_response = (
+            supabase
+            .table("feed_comments")
+            .select("id,item_type,item_id,parent_comment_id")
+            .eq("id", parent_comment_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not parent_response.data:
+            raise ValueError("Comment not found")
+
+        parent = parent_response.data[0]
+
+        if parent["item_type"] != item_type or parent["item_id"] != item_id:
+            raise ValueError("Comment not found")
+
+        # Single-level threading only -- a reply can't itself be replied to.
+        if parent.get("parent_comment_id") is not None:
+            raise ValueError("Can't reply to a reply")
+
     response = (
         supabase
         .table("feed_comments")
@@ -1484,6 +1551,7 @@ def add_comment(
             "user_id": user_id,
             "body": body,
             "mentioned_user_ids": _validate_mentions(user_id, mentioned_user_ids),
+            "parent_comment_id": parent_comment_id,
         })
         .execute()
     )

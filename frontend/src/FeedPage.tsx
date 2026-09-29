@@ -68,7 +68,9 @@ type Comment = {
     author_avatar_url: string | null;
     body: string;
     created_at: string;
+    parent_comment_id: number | null;
     reactions: ReactionSummary;
+    replies: Comment[];
 };
 
 type Friend = {
@@ -100,6 +102,13 @@ const NEW_POST_KEY = "new-post";
 
 function itemKey(itemType: string, itemId: number) {
     return `${itemType}:${itemId}`;
+}
+
+// A reply composer needs its own draft/posting-state key, distinct from the
+// top-level comment box for the same item, so typing a reply doesn't clobber
+// (or get clobbered by) whatever's in the main comment input.
+function replyComposerKey(itemType: string, itemId: number, parentCommentId: number) {
+    return `${itemKey(itemType, itemId)}:reply:${parentCommentId}`;
 }
 
 function formatDate(value: string) {
@@ -473,6 +482,9 @@ function PostReactionBar({
 function CommentComposer({
     itemType,
     itemId,
+    parentCommentId,
+    composerKey,
+    placeholder,
     draft,
     suggestions,
     emojiPickerOpen,
@@ -486,6 +498,9 @@ function CommentComposer({
 }: {
     itemType: string;
     itemId: number;
+    parentCommentId?: number;
+    composerKey: string;
+    placeholder?: string;
     draft: string;
     suggestions: Friend[];
     emojiPickerOpen: string | null;
@@ -494,18 +509,21 @@ function CommentComposer({
     onSelectMention: (key: string, name: string) => void;
     onToggleEmojiPicker: (key: string) => void;
     onInsertEmoji: (key: string, emoji: string) => void;
-    onSubmit: (event: FormEvent, itemType: string, itemId: number) => void;
+    onSubmit: (event: FormEvent, itemType: string, itemId: number, parentCommentId?: number) => void;
     inputRef: (el: HTMLInputElement | null) => void;
 }) {
-    const key = itemKey(itemType, itemId);
+    const key = composerKey;
 
     return (
-        <form className="feed-comment-form" onSubmit={(event) => onSubmit(event, itemType, itemId)}>
+        <form
+            className="feed-comment-form"
+            onSubmit={(event) => onSubmit(event, itemType, itemId, parentCommentId)}
+        >
             <div className="feed-comment-input-wrap">
                 <input
                     ref={inputRef}
                     className="settings-input"
-                    placeholder="Write a comment... @ to mention a friend"
+                    placeholder={placeholder ?? "Write a comment... @ to mention a friend"}
                     value={draft}
                     onChange={(event) => onDraftChange(key, event.target.value)}
                 />
@@ -581,6 +599,7 @@ function FeedPage() {
     const [reactionDetailsLoading, setReactionDetailsLoading] = useState(false);
     const [shareMenuOpen, setShareMenuOpen] = useState<string | null>(null);
     const [shareTarget, setShareTarget] = useState<FeedItem | null>(null);
+    const [activeReplyCommentId, setActiveReplyCommentId] = useState<number | null>(null);
 
     const [postPhotoUrl, setPostPhotoUrl] = useState<string | null>(null);
     const [postPhotoUploading, setPostPhotoUploading] = useState(false);
@@ -903,30 +922,43 @@ function FeedPage() {
         setEmojiPickerOpen((prev) => (prev === key ? null : key));
     }
 
-    async function handlePostComment(event: FormEvent, itemType: string, itemId: number) {
+    async function handlePostComment(
+        event: FormEvent,
+        itemType: string,
+        itemId: number,
+        parentCommentId?: number
+    ) {
         event.preventDefault();
-        const key = itemKey(itemType, itemId);
-        const body = (drafts[key] || "").trim();
+        const itemMapKey = itemKey(itemType, itemId);
+        const composerKey = parentCommentId
+            ? replyComposerKey(itemType, itemId, parentCommentId)
+            : itemMapKey;
+        const body = (drafts[composerKey] || "").trim();
         if (!body) return;
 
-        setPosting((prev) => new Set(prev).add(key));
+        setPosting((prev) => new Set(prev).add(composerKey));
 
         try {
             const response = await authFetch(`${API}/feed/${itemType}/${itemId}/comments`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ body, mentioned_user_ids: deriveMentionedUserIds(body) }),
+                body: JSON.stringify({
+                    body,
+                    mentioned_user_ids: deriveMentionedUserIds(body),
+                    parent_comment_id: parentCommentId ?? null,
+                }),
             });
 
             if (response.ok) {
-                setDrafts((prev) => ({ ...prev, [key]: "" }));
+                setDrafts((prev) => ({ ...prev, [composerKey]: "" }));
                 setMentionQuery((prev) => {
                     const next = { ...prev };
-                    delete next[key];
+                    delete next[composerKey];
                     return next;
                 });
                 setEmojiPickerOpen(null);
-                await loadComments(key, itemType, itemId);
+                if (parentCommentId) setActiveReplyCommentId(null);
+                await loadComments(itemMapKey, itemType, itemId);
                 setFeed((prev) =>
                     prev.map((item) =>
                         item.item_type === itemType && item.item_id === itemId
@@ -940,7 +972,7 @@ function FeedPage() {
         } finally {
             setPosting((prev) => {
                 const next = new Set(prev);
-                next.delete(key);
+                next.delete(composerKey);
                 return next;
             });
         }
@@ -1461,44 +1493,117 @@ function FeedPage() {
 
                                 <div className="feed-card-footer">
                                     <div className="feed-comments">
-                                        {itemComments.map((comment) => (
-                                                <div className="feed-comment-row" key={comment.id}>
-                                                    <Avatar
-                                                        name={comment.author_name}
-                                                        avatarUrl={comment.author_avatar_url}
-                                                        small
-                                                        onClick={() => setOpenProfileUserId(comment.user_id)}
-                                                    />
+                                        {itemComments.map((comment) => {
+                                            const replyKey = replyComposerKey(item.item_type, item.item_id, comment.id);
+                                            return (
+                                                <div className="feed-comment-thread" key={comment.id}>
+                                                    <div className="feed-comment-row">
+                                                        <Avatar
+                                                            name={comment.author_name}
+                                                            avatarUrl={comment.author_avatar_url}
+                                                            small
+                                                            onClick={() => setOpenProfileUserId(comment.user_id)}
+                                                        />
 
-                                                    <div className="feed-comment-bubble-wrap">
-                                                        <div className="feed-comment-bubble">
-                                                            <strong>{comment.author_name}</strong>
-                                                            <p>{renderBody(comment.body, friends, setOpenProfileUserId, handleTournamentClick)}</p>
-                                                        </div>
+                                                        <div className="feed-comment-bubble-wrap">
+                                                            <div className="feed-comment-bubble">
+                                                                <strong>{comment.author_name}</strong>
+                                                                <p>{renderBody(comment.body, friends, setOpenProfileUserId, handleTournamentClick)}</p>
+                                                            </div>
 
-                                                        <div className="feed-comment-meta">
-                                                            <span>{formatDateTime(comment.created_at)}</span>
-                                                            <ReactionBar
-                                                                itemType="comment"
-                                                                itemId={comment.id}
-                                                                reactions={comment.reactions}
-                                                                reactionPickerOpen={reactionPickerOpen}
-                                                                onToggleReactionPicker={(k) =>
-                                                                    setReactionPickerOpen((prev) =>
-                                                                        prev === k ? null : k
-                                                                    )
-                                                                }
-                                                                onReact={react}
-                                                            />
+                                                            <div className="feed-comment-meta">
+                                                                <span>{formatDateTime(comment.created_at)}</span>
+                                                                <ReactionBar
+                                                                    itemType="comment"
+                                                                    itemId={comment.id}
+                                                                    reactions={comment.reactions}
+                                                                    reactionPickerOpen={reactionPickerOpen}
+                                                                    onToggleReactionPicker={(k) =>
+                                                                        setReactionPickerOpen((prev) =>
+                                                                            prev === k ? null : k
+                                                                        )
+                                                                    }
+                                                                    onReact={react}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    className="feed-comment-reply-btn"
+                                                                    onClick={() =>
+                                                                        setActiveReplyCommentId((prev) =>
+                                                                            prev === comment.id ? null : comment.id
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Reply
+                                                                </button>
+                                                            </div>
+
+                                                            {comment.replies.map((reply) => (
+                                                                <div className="feed-comment-row feed-comment-reply" key={reply.id}>
+                                                                    <Avatar
+                                                                        name={reply.author_name}
+                                                                        avatarUrl={reply.author_avatar_url}
+                                                                        small
+                                                                        onClick={() => setOpenProfileUserId(reply.user_id)}
+                                                                    />
+
+                                                                    <div className="feed-comment-bubble-wrap">
+                                                                        <div className="feed-comment-bubble">
+                                                                            <strong>{reply.author_name}</strong>
+                                                                            <p>{renderBody(reply.body, friends, setOpenProfileUserId, handleTournamentClick)}</p>
+                                                                        </div>
+
+                                                                        <div className="feed-comment-meta">
+                                                                            <span>{formatDateTime(reply.created_at)}</span>
+                                                                            <ReactionBar
+                                                                                itemType="comment"
+                                                                                itemId={reply.id}
+                                                                                reactions={reply.reactions}
+                                                                                reactionPickerOpen={reactionPickerOpen}
+                                                                                onToggleReactionPicker={(k) =>
+                                                                                    setReactionPickerOpen((prev) =>
+                                                                                        prev === k ? null : k
+                                                                                    )
+                                                                                }
+                                                                                onReact={react}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+
+                                                            {activeReplyCommentId === comment.id && (
+                                                                <CommentComposer
+                                                                    itemType={item.item_type}
+                                                                    itemId={item.item_id}
+                                                                    parentCommentId={comment.id}
+                                                                    composerKey={replyKey}
+                                                                    placeholder={`Reply to ${comment.author_name}...`}
+                                                                    draft={drafts[replyKey] || ""}
+                                                                    suggestions={mentionSuggestions(replyKey)}
+                                                                    emojiPickerOpen={emojiPickerOpen}
+                                                                    posting={posting.has(replyKey)}
+                                                                    onDraftChange={handleDraftChange}
+                                                                    onSelectMention={selectMention}
+                                                                    onToggleEmojiPicker={toggleEmojiPicker}
+                                                                    onInsertEmoji={insertEmoji}
+                                                                    onSubmit={handlePostComment}
+                                                                    inputRef={(el) => {
+                                                                        commentInputRefs.current[replyKey] = el;
+                                                                    }}
+                                                                />
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ))}
+                                            );
+                                        })}
                                     </div>
 
                                     <CommentComposer
                                         itemType={item.item_type}
                                         itemId={item.item_id}
+                                        composerKey={key}
                                         draft={drafts[key] || ""}
                                         suggestions={mentionSuggestions(key)}
                                         emojiPickerOpen={emojiPickerOpen}

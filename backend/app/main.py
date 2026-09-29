@@ -834,6 +834,7 @@ def feed_comments_batch(body: CommentBatchBody, user_id: str = Depends(get_curre
 class CommentBody(BaseModel):
     body: str
     mentioned_user_ids: list[str] = []
+    parent_comment_id: int | None = None
 
 
 @app.post("/feed/{item_type}/{item_id}/comments")
@@ -841,7 +842,9 @@ def feed_comments_create(
     item_type: str, item_id: int, body: CommentBody, user_id: str = Depends(get_current_user_id)
 ):
     try:
-        return add_comment(user_id, item_type, item_id, body.body, body.mentioned_user_ids)
+        return add_comment(
+            user_id, item_type, item_id, body.body, body.mentioned_user_ids, body.parent_comment_id
+        )
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
 

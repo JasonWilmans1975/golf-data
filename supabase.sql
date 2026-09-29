@@ -622,3 +622,12 @@ alter table if exists public.posts add column if not exists mentioned_user_ids u
 alter table if exists public.feed_comments add column if not exists mentioned_user_ids uuid[] not null default '{}';
 create index if not exists posts_mentioned_user_ids_idx on public.posts using gin (mentioned_user_ids);
 create index if not exists feed_comments_mentioned_user_ids_idx on public.feed_comments using gin (mentioned_user_ids);
+
+-- Single-level comment replies (Facebook-style -- a reply attaches to a
+-- top-level comment; replying to a reply is rejected server-side in
+-- add_comment, not just hidden in the UI). item_type/item_id still point at
+-- the original round/post unchanged, so reactions/RLS/ownership checks on a
+-- comment keep working without modification -- this is purely additive
+-- linkage between two feed_comments rows.
+alter table if exists public.feed_comments add column if not exists parent_comment_id bigint references public.feed_comments(id) on delete cascade;
+create index if not exists feed_comments_parent_idx on public.feed_comments(parent_comment_id);
