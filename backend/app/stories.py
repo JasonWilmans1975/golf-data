@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
 from .db import supabase
-from .friends import list_friend_ids, _display_name, _avatar_url
+from .friends import list_friend_ids, _display_name, _avatar_url, _reaction_summary, _empty_reactions
+
+TEXT_STORY_MAX_LENGTH = 300
+PHOTO_CAPTION_MAX_LENGTH = 200
 
 STORY_LIFETIME = timedelta(hours=24)
 
@@ -14,13 +17,36 @@ def _active_since() -> str:
     return (datetime.now(timezone.utc) - STORY_LIFETIME).isoformat()
 
 
-def create_story(user_id: str, photo_url: str, caption: str | None) -> dict:
-    caption = (caption or "").strip()[:200] or None
+def create_story(
+    user_id: str, photo_url: str | None, caption: str | None, background_color: str | None
+) -> dict:
+    """A story is either a photo (with an optional short caption) or, when
+    photo_url is None, a text-only story -- inferred from photo_url being
+    absent rather than a separate story_type column. A text-only story
+    needs actual text; background_color only means anything for that case."""
+    caption = (caption or "").strip()
+    is_text_only = photo_url is None
+
+    if is_text_only:
+        if not caption:
+            raise ValueError("A text story needs some text")
+        caption = caption[:TEXT_STORY_MAX_LENGTH]
+    else:
+        caption = caption[:PHOTO_CAPTION_MAX_LENGTH] or None
+        background_color = None
+
+    if is_text_only and not background_color:
+        background_color = "g1"
 
     response = (
         supabase
         .table("stories")
-        .insert({"user_id": user_id, "photo_url": photo_url, "caption": caption})
+        .insert({
+            "user_id": user_id,
+            "photo_url": photo_url,
+            "caption": caption,
+            "background_color": background_color,
+        })
         .execute()
     )
 
@@ -36,7 +62,7 @@ def list_stories(user_id: str) -> list[dict]:
     response = (
         supabase
         .table("stories")
-        .select("id,user_id,photo_url,caption,created_at")
+        .select("id,user_id,photo_url,caption,background_color,created_at")
         .in_("user_id", circle_ids)
         .gte("created_at", _active_since())
         .order("created_at")
@@ -69,6 +95,8 @@ def list_stories(user_id: str) -> list[dict]:
     )
     profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
 
+    reactions_by_story = _reaction_summary(user_id, [("story", row["id"]) for row in rows])
+
     groups_by_user: dict[str, dict] = {}
     for row in rows:
         group = groups_by_user.setdefault(row["user_id"], {
@@ -84,8 +112,10 @@ def list_stories(user_id: str) -> list[dict]:
             "id": row["id"],
             "photo_url": row["photo_url"],
             "caption": row["caption"],
+            "background_color": row["background_color"],
             "created_at": row["created_at"],
             "viewed_by_me": viewed,
+            "reactions": reactions_by_story.get(("story", row["id"]), _empty_reactions()),
         })
 
         if not viewed and row["user_id"] != user_id:

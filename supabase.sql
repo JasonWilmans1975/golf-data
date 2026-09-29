@@ -692,3 +692,32 @@ create table if not exists public.story_views (
 create index if not exists story_views_story_id_idx on public.story_views(story_id);
 
 alter publication supabase_realtime add table public.stories;
+
+-- Text-only stories (no photo, just a background + caption) alongside
+-- photo stories with an optional caption -- inferred by photo_url being
+-- null, not a separate story_type column.
+alter table if exists public.stories alter column photo_url drop not null;
+alter table if exists public.stories add column if not exists background_color text;
+
+-- Reactions on stories, reusing the same feed_likes table/toggle_reaction
+-- endpoint every other reactable item already uses -- just widening the
+-- item_type check to allow 'story'. Done via a DO block rather than a
+-- fixed constraint name since Postgres' auto-generated name for an inline
+-- column check isn't guaranteed to match what's assumed here.
+do $$
+declare
+  existing_constraint text;
+begin
+  select conname into existing_constraint
+  from pg_constraint
+  where conrelid = 'public.feed_likes'::regclass
+    and contype = 'c'
+    and pg_get_constraintdef(oid) like '%item_type%';
+
+  if existing_constraint is not null then
+    execute format('alter table public.feed_likes drop constraint %I', existing_constraint);
+  end if;
+end $$;
+
+alter table public.feed_likes add constraint feed_likes_item_type_check
+  check (item_type in ('round', 'post', 'comment', 'story'));

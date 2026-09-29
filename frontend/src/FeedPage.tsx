@@ -9,13 +9,8 @@ import { useAuth } from "./AuthContext";
 import { Avatar, FriendProfileModal } from "./FriendProfileModal";
 import { StoryBar, type StoryGroup } from "./StoryBar";
 import { StoryViewer } from "./StoryViewer";
-
-type ReactionSummary = {
-    counts: Record<string, number>;
-    total: number;
-    my_reaction: string | null;
-    recent_reactor_names: string[];
-};
+import { StoryComposer } from "./StoryComposer";
+import { type ReactionSummary, REACTION_EMOJI, applyReaction } from "./reactions";
 
 type ReactionDetail = {
     user_id: string;
@@ -99,15 +94,6 @@ const EMOJIS = [
     "⛳", "🏌️", "🏆", "🔥", "💪", "😅",
     "😢", "😮", "❤️", "🙌", "🤝", "😎",
 ];
-
-const REACTION_EMOJI: Record<string, string> = {
-    like: "👍",
-    love: "❤️",
-    haha: "😆",
-    wow: "😮",
-    sad: "😢",
-    angry: "😠",
-};
 
 // Derived from wherever the app is actually running rather than hardcoded --
 // this one source file is shared by both the golfcircle.me and
@@ -343,32 +329,6 @@ function shareToFacebook(item: FeedItem) {
         `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(APP_URL)}` +
         `&quote=${encodeURIComponent(shareText(item))}`;
     window.open(url, "_blank");
-}
-
-function applyReaction(
-    current: ReactionSummary,
-    previousMine: string | null,
-    newMine: string | null
-): ReactionSummary {
-    const counts = { ...current.counts };
-
-    if (previousMine) {
-        counts[previousMine] = Math.max(0, (counts[previousMine] || 0) - 1);
-        if (counts[previousMine] === 0) delete counts[previousMine];
-    }
-
-    if (newMine) {
-        counts[newMine] = (counts[newMine] || 0) + 1;
-    }
-
-    const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
-
-    // Best-effort optimistic update -- matches the backend's "You" convention
-    // for the viewer's own reaction until the next full feed reload.
-    let recentReactorNames = current.recent_reactor_names.filter((name) => name !== "You");
-    if (newMine) recentReactorNames = ["You", ...recentReactorNames].slice(0, 5);
-
-    return { counts, total, my_reaction: newMine, recent_reactor_names: recentReactorNames };
 }
 
 // "Liked by You and 4 others" / "Liked by Dave, Brent and 2 others" / "Liked by Dave"
@@ -717,6 +677,7 @@ function FeedPage() {
 
     const [storyGroups, setStoryGroups] = useState<StoryGroup[]>([]);
     const [storyUploading, setStoryUploading] = useState(false);
+    const [storyComposerOpen, setStoryComposerOpen] = useState(false);
     const [activeStoryGroupIndex, setActiveStoryGroupIndex] = useState<number | null>(null);
     const [activeStoryIndex, setActiveStoryIndex] = useState(0);
 
@@ -875,16 +836,43 @@ function FeedPage() {
         }
     }
 
-    async function handleAddStoryFile(file: File) {
+    async function handleShareStory(input: { file: File | null; caption: string; backgroundColor: string | null }) {
         setStoryUploading(true);
 
         try {
-            await uploadStory(file, "");
+            await uploadStory(input.file, input.caption, input.backgroundColor);
             await loadStories();
+            setStoryComposerOpen(false);
         } catch (error) {
             console.error(error);
         } finally {
             setStoryUploading(false);
+        }
+    }
+
+    async function reactToStory(storyId: number, reaction: string) {
+        try {
+            const response = await authFetch(`${API}/feed/story/${storyId}/react`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reaction }),
+            });
+
+            if (!response.ok) return;
+            const body: { reaction: string | null } = await response.json();
+
+            setStoryGroups((prev) =>
+                prev.map((group) => ({
+                    ...group,
+                    stories: group.stories.map((story) =>
+                        story.id === storyId
+                            ? { ...story, reactions: applyReaction(story.reactions, story.reactions.my_reaction, body.reaction) }
+                            : story
+                    ),
+                }))
+            );
+        } catch (error) {
+            console.error(error);
         }
     }
 
@@ -1608,7 +1596,7 @@ function FeedPage() {
                         myName={myName}
                         myAvatarUrl={myAvatarUrl}
                         onOpenGroup={openStoryGroup}
-                        onAddStory={handleAddStoryFile}
+                        onOpenComposer={() => setStoryComposerOpen(true)}
                         uploading={storyUploading}
                     />
                 )}
@@ -2462,6 +2450,15 @@ function FeedPage() {
                     onClose={closeStoryViewer}
                     onNavigate={navigateStoryViewer}
                     onStoryViewed={markStoryViewed}
+                    onReact={reactToStory}
+                />
+            )}
+
+            {storyComposerOpen && (
+                <StoryComposer
+                    onClose={() => setStoryComposerOpen(false)}
+                    onShare={handleShareStory}
+                    uploading={storyUploading}
                 />
             )}
         </div>

@@ -1,12 +1,14 @@
-import { useRef, type ChangeEvent } from "react";
 import { Avatar } from "./FriendProfileModal";
+import type { ReactionSummary } from "./reactions";
 
 export type Story = {
     id: number;
-    photo_url: string;
+    photo_url: string | null;
     caption: string | null;
+    background_color: string | null;
     created_at: string;
     viewed_by_me: boolean;
+    reactions: ReactionSummary;
 };
 
 export type StoryGroup = {
@@ -32,7 +34,7 @@ export function StoryBar({
     myName,
     myAvatarUrl,
     onOpenGroup,
-    onAddStory,
+    onOpenComposer,
     uploading,
 }: {
     groups: StoryGroup[];
@@ -40,33 +42,18 @@ export function StoryBar({
     myName: string;
     myAvatarUrl: string | null;
     onOpenGroup: (index: number) => void;
-    onAddStory: (file: File) => void;
+    onOpenComposer: () => void;
     uploading: boolean;
 }) {
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const myGroupIndex = groups.findIndex((group) => group.user_id === myUserId);
     const myGroup = myGroupIndex >= 0 ? groups[myGroupIndex] : null;
 
-    function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-        const file = event.target.files?.[0];
-        event.target.value = "";
-        if (file) onAddStory(file);
-    }
-
     return (
         <div className="story-bar">
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                hidden
-                onChange={handleFileChange}
-            />
-
             <button
                 type="button"
                 className="story-circle"
-                onClick={() => (myGroup ? onOpenGroup(myGroupIndex) : fileInputRef.current?.click())}
+                onClick={() => (myGroup ? onOpenGroup(myGroupIndex) : onOpenComposer())}
             >
                 <div className={`story-ring${myGroup?.has_unviewed ? " story-ring-unviewed" : " story-ring-none"}`}>
                     <Avatar name={myName || "?"} avatarUrl={myAvatarUrl} />
@@ -77,7 +64,7 @@ export function StoryBar({
                             aria-label="Add to your story"
                             onClick={(event) => {
                                 event.stopPropagation();
-                                fileInputRef.current?.click();
+                                onOpenComposer();
                             }}
                             disabled={uploading}
                         >

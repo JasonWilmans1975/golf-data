@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { API, authFetch } from "./api";
 import { Avatar } from "./FriendProfileModal";
 import type { StoryGroup } from "./StoryBar";
+import { backgroundCss } from "./StoryComposer";
+import { REACTION_EMOJI } from "./reactions";
 
 const STORY_DURATION_MS = 5000;
 
@@ -15,6 +17,7 @@ export function StoryViewer({
     onClose,
     onNavigate,
     onStoryViewed,
+    onReact,
 }: {
     groups: StoryGroup[];
     groupIndex: number;
@@ -23,6 +26,7 @@ export function StoryViewer({
     onClose: () => void;
     onNavigate: (groupIndex: number, storyIndex: number) => void;
     onStoryViewed: (storyId: number) => void;
+    onReact: (storyId: number, reaction: string) => void;
 }) {
     const group = groups[groupIndex];
     const story = group?.stories[storyIndex];
@@ -142,17 +146,38 @@ export function StoryViewer({
                 </button>
             </div>
 
-            <img src={story.photo_url} alt="" className="story-viewer-image" />
+            {story.photo_url ? (
+                <img src={story.photo_url} alt="" className="story-viewer-image" />
+            ) : (
+                <div className="story-viewer-text-slide" style={{ background: backgroundCss(story.background_color) }}>
+                    <p>{story.caption}</p>
+                </div>
+            )}
 
             <div className="story-viewer-tap-zone story-viewer-tap-prev" onClick={goPrev} />
             <div className="story-viewer-tap-zone story-viewer-tap-next" onClick={goNext} />
 
-            {story.caption && <div className="story-viewer-caption">{story.caption}</div>}
+            {story.photo_url && story.caption && (
+                <div className="story-viewer-caption">{story.caption}</div>
+            )}
 
-            {isOwn && (
+            {isOwn ? (
                 <button type="button" className="story-viewer-seenby" onClick={openViewers}>
                     Seen by
                 </button>
+            ) : (
+                <div className="story-viewer-reactions" onClick={(event) => event.stopPropagation()}>
+                    {Object.entries(REACTION_EMOJI).map(([reaction, emoji]) => (
+                        <button
+                            type="button"
+                            key={reaction}
+                            className={story.reactions.my_reaction === reaction ? "active" : ""}
+                            onClick={() => onReact(story.id, reaction)}
+                        >
+                            {emoji}
+                        </button>
+                    ))}
+                </div>
             )}
 
             {viewers !== null && (

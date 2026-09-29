@@ -176,12 +176,15 @@ export async function uploadAvatarPhoto(file: File) {
     return (await response.json()) as { avatar_url: string };
 }
 
-export async function uploadStory(file: File, caption: string) {
-    const compressed = await compressImage(file);
-
+export async function uploadStory(file: File | null, caption: string, backgroundColor: string | null) {
     const formData = new FormData();
-    formData.append("file", compressed);
+
+    if (file) {
+        const compressed = await compressImage(file);
+        formData.append("file", compressed);
+    }
     if (caption.trim()) formData.append("caption", caption.trim());
+    if (backgroundColor) formData.append("background_color", backgroundColor);
 
     const response = await authFetch(`${API}/stories`, {
         method: "POST",

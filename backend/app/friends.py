@@ -718,6 +718,10 @@ def _resolve_reactable_owner(item_type: str, item_id: int) -> str | None:
     if item_type in ("round", "post"):
         return _item_owner(item_type, item_id)
 
+    if item_type == "story":
+        story_response = supabase.table("stories").select("user_id").eq("id", item_id).limit(1).execute()
+        return story_response.data[0]["user_id"] if story_response.data else None
+
     raise ValueError("Invalid item type")
 
 

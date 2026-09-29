@@ -937,23 +937,30 @@ def feed_saved(limit: int = 20, offset: int = 0, user_id: str = Depends(get_curr
 
 @app.post("/stories")
 async def upload_story(
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(None),
     caption: str = Form(None),
+    background_color: str = Form(None),
     user_id: str = Depends(get_current_user_id),
 ):
-    contents = await file.read()
-    extension = (file.filename or "").rsplit(".", 1)[-1].lower() or "jpg"
-    path = f"{user_id}/{uuid.uuid4().hex}.{extension}"
+    photo_url = None
 
-    supabase.storage.from_(STORY_PHOTOS_BUCKET).upload(
-        path,
-        contents,
-        {"content-type": file.content_type or "image/jpeg"},
-    )
+    if file is not None:
+        contents = await file.read()
+        extension = (file.filename or "").rsplit(".", 1)[-1].lower() or "jpg"
+        path = f"{user_id}/{uuid.uuid4().hex}.{extension}"
 
-    photo_url = supabase.storage.from_(STORY_PHOTOS_BUCKET).get_public_url(path)
+        supabase.storage.from_(STORY_PHOTOS_BUCKET).upload(
+            path,
+            contents,
+            {"content-type": file.content_type or "image/jpeg"},
+        )
 
-    return create_story(user_id, photo_url, caption)
+        photo_url = supabase.storage.from_(STORY_PHOTOS_BUCKET).get_public_url(path)
+
+    try:
+        return create_story(user_id, photo_url, caption, background_color)
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc))
 
 
 @app.get("/stories")
