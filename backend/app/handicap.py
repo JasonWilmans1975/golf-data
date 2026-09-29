@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from playwright.async_api import async_playwright
 from starlette.concurrency import run_in_threadpool
 
-from .db import supabase, fetch_all, execute_with_retry
+from .db import supabase, fetch_all, execute_with_retry, retry_whole_sync
 from .courses import match_handicap_scores_to_courses
 from .crypto import encrypt, decrypt
 from .milestones import check_and_award_milestones
@@ -428,7 +428,7 @@ async def sync_all_users() -> dict:
 
     for user_id in _all_user_ids_with_credentials():
         try:
-            result = await sync_handicap_data(user_id, force=True)
+            result = await retry_whole_sync(lambda uid=user_id: sync_handicap_data(uid, force=True))
             results["skipped" if result.get("skipped") else "synced"] += 1
         except Exception:
             # One user's expired/invalid credentials shouldn't stop the

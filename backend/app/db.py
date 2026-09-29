@@ -1,7 +1,9 @@
+import asyncio
 import threading
 import time
 
 import httpx
+from postgrest.exceptions import APIError
 from supabase import create_client, ClientOptions
 from .config import settings
 
@@ -85,6 +87,41 @@ def execute_with_retry(build_query, retries: int = 2, delay: float = 0.3):
             last_error = exc
             if attempt < retries:
                 time.sleep(delay)
+
+    raise last_error
+
+
+def _is_transient_route_not_found(exc: Exception) -> bool:
+    return (
+        isinstance(exc, APIError)
+        and exc.code == 404
+        and "not found" in (exc.details or "").lower()
+    )
+
+
+async def retry_whole_sync(run, retries: int = 1, delay: float = 1.0):
+    """A full sync (handicap/garmin/teesheet) makes dozens of sequential
+    Supabase calls -- any single one hitting the transient "Route not
+    found" gateway blip execute_with_retry exists for fails the entire
+    sync. Wrapping every individual call site along that whole chain isn't
+    practical; retrying the whole operation once is far simpler and just as
+    effective, since a sync is safe to re-run (force=True is already how
+    the manual "Sync now" button works).
+
+    Only retries on that specific transient signature -- a real error
+    (bad credentials, a genuine bug) is never blindly retried.
+    """
+    last_error: Exception | None = None
+
+    for attempt in range(retries + 1):
+        try:
+            return await run()
+        except APIError as exc:
+            if not _is_transient_route_not_found(exc):
+                raise
+            last_error = exc
+            if attempt < retries:
+                await asyncio.sleep(delay)
 
     raise last_error
 

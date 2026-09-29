@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from .config import settings
-from .db import supabase, fetch_all, execute_with_retry
+from .db import supabase, fetch_all, execute_with_retry, retry_whole_sync
 from .auth import get_current_user_id, get_user_id_from_token
 from .strava import authorization_url, exchange_code, refresh_token_if_needed, fetch_all_activities, delete_tokens as delete_strava_tokens
 from .courses import (
@@ -321,7 +321,7 @@ def garmin_disconnect(user_id: str = Depends(get_current_user_id)):
 @app.post("/garmin/sync")
 async def garmin_sync(force: bool = False, user_id: str = Depends(get_current_user_id)):
     try:
-        return await sync_garmin_data(user_id, force=force)
+        return await retry_whole_sync(lambda: sync_garmin_data(user_id, force=force))
     except RuntimeError as exc:
         raise HTTPException(502, detail=str(exc))
 
@@ -380,7 +380,7 @@ def teesheet_disconnect(user_id: str = Depends(get_current_user_id)):
 @app.post("/teesheet/sync")
 async def teesheet_sync(force: bool = False, user_id: str = Depends(get_current_user_id)):
     try:
-        return await sync_teesheet_data(user_id, force=force)
+        return await retry_whole_sync(lambda: sync_teesheet_data(user_id, force=force))
     except RuntimeError as exc:
         raise HTTPException(502, detail=str(exc))
 
@@ -466,7 +466,9 @@ async def handicap_sync(
     force: bool = False, full_resync: bool = False, user_id: str = Depends(get_current_user_id)
 ):
     try:
-        return await sync_handicap_data(user_id, force=force, full_resync=full_resync)
+        return await retry_whole_sync(
+            lambda: sync_handicap_data(user_id, force=force, full_resync=full_resync)
+        )
     except RuntimeError as exc:
         raise HTTPException(502, detail=str(exc))
 
