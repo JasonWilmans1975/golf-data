@@ -13,6 +13,19 @@ type SearchResult = {
     relationship: "none" | "pending_sent" | "pending_received" | "friends";
 };
 
+type TeesheetBuddy = {
+    buddy_name: string;
+    on_golfcircle: boolean;
+    user_id: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+    relationship: "none" | "pending_sent" | "pending_received" | null;
+};
+
+// Derived from wherever the app is actually running, same as FeedPage's
+// share links -- this file doesn't otherwise need to know its own domain.
+const APP_URL = `${window.location.origin}${import.meta.env.BASE_URL}`;
+
 type Friend = {
     user_id: string;
     display_name: string;
@@ -72,23 +85,26 @@ function FriendsPage() {
     const [query, setQuery] = useState("");
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [searching, setSearching] = useState(false);
+    const [teesheetBuddies, setTeesheetBuddies] = useState<TeesheetBuddy[]>([]);
     const [sendingTo, setSendingTo] = useState<string | null>(null);
     const [sendError, setSendError] = useState<string | null>(null);
     const [sendMessage, setSendMessage] = useState<string | null>(null);
 
     async function loadData() {
         try {
-            const [friendsRes, requestsRes, sentRes, feedRes] = await Promise.all([
+            const [friendsRes, requestsRes, sentRes, feedRes, buddiesRes] = await Promise.all([
                 authFetch(`${API}/friends`),
                 authFetch(`${API}/friends/requests`),
                 authFetch(`${API}/friends/requests/sent`),
                 authFetch(`${API}/friends/feed?limit=5`),
+                authFetch(`${API}/friends/teesheet-buddies`),
             ]);
 
             if (friendsRes.ok) setFriends(await friendsRes.json());
             if (requestsRes.ok) setRequests(await requestsRes.json());
             if (sentRes.ok) setSentRequests(await sentRes.json());
             if (feedRes.ok) setFeed(await feedRes.json());
+            if (buddiesRes.ok) setTeesheetBuddies(await buddiesRes.json());
         } catch (error) {
             console.error(error);
         }
@@ -163,12 +179,23 @@ function FriendsPage() {
                         ? "You're now friends!"
                         : "Friend request sent."
                 );
+                const newRelationship = body?.status === "accepted" ? "friends" : "pending_sent";
+
                 setSearchResults((prev) =>
                     prev.map((result) =>
                         result.user_id === targetUserId
-                            ? { ...result, relationship: body?.status === "accepted" ? "friends" : "pending_sent" }
+                            ? { ...result, relationship: newRelationship }
                             : result
                     )
+                );
+                setTeesheetBuddies((prev) =>
+                    newRelationship === "friends"
+                        ? prev.filter((buddy) => buddy.user_id !== targetUserId)
+                        : prev.map((buddy) =>
+                              buddy.user_id === targetUserId
+                                  ? { ...buddy, relationship: newRelationship }
+                                  : buddy
+                          )
                 );
                 await loadData();
             }
@@ -178,6 +205,16 @@ function FriendsPage() {
         } finally {
             setSendingTo(null);
         }
+    }
+
+    function inviteBuddyViaWhatsApp(buddyName: string) {
+        const firstName = buddyName.split(" ")[0];
+        const text =
+            `Hey ${firstName}! I'm using GolfCircle to track my rounds, handicap, ` +
+            `and connect with the buddies I play with -- thought you'd want in too. ` +
+            `Join me here: ${APP_URL}`;
+
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, "_blank");
     }
 
     async function handleRespond(requestId: number, accept: boolean) {
@@ -289,6 +326,61 @@ function FriendsPage() {
                         </div>
                     )}
                 </section>
+
+                {teesheetBuddies.length > 0 && (
+                    <>
+                        <section className="section-heading">
+                            <div>
+                                <p className="eyebrow">TEESHEET BUDDIES</p>
+                                <h3>People you play with</h3>
+                            </div>
+
+                            <span className="course-count">{teesheetBuddies.length}</span>
+                        </section>
+
+                        <div className="round-list">
+                            {teesheetBuddies.map((buddy) => (
+                                <div className="round-row" key={buddy.user_id || buddy.buddy_name}>
+                                    <div className="friend-search-result">
+                                        <Avatar
+                                            name={buddy.display_name || buddy.buddy_name}
+                                            avatarUrl={buddy.avatar_url}
+                                            small
+                                        />
+                                        <strong>{buddy.display_name || buddy.buddy_name}</strong>
+                                    </div>
+
+                                    {!buddy.on_golfcircle && (
+                                        <button
+                                            className="round-row-button"
+                                            onClick={() => inviteBuddyViaWhatsApp(buddy.buddy_name)}
+                                        >
+                                            Invite via WhatsApp
+                                        </button>
+                                    )}
+
+                                    {buddy.on_golfcircle && buddy.relationship === "pending_sent" && (
+                                        <span className="course-count">Request sent</span>
+                                    )}
+
+                                    {buddy.on_golfcircle && buddy.relationship === "pending_received" && (
+                                        <span className="course-count">Sent you a request — see below</span>
+                                    )}
+
+                                    {buddy.on_golfcircle && buddy.relationship === "none" && buddy.user_id && (
+                                        <button
+                                            className="sync-button"
+                                            onClick={() => handleSendRequest(buddy.user_id!)}
+                                            disabled={sendingTo === buddy.user_id}
+                                        >
+                                            {sendingTo === buddy.user_id ? "Sending..." : "Add"}
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
 
                 {requests.length > 0 && (
                     <>

@@ -176,6 +176,86 @@ def search_users(user_id: str, query: str, limit: int = 20) -> list[dict]:
     ]
 
 
+def get_teesheet_buddies_not_friends(user_id: str) -> list[dict]:
+    """Your real teesheet.co.za buddy list, minus anyone already a GolfCircle
+    friend -- so you can see who from your real-world circle hasn't
+    connected yet, whether or not they're even on GolfCircle at all."""
+    my_credentials = (
+        supabase
+        .table("teesheet_credentials")
+        .select("club_id")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not my_credentials.data:
+        return []
+
+    club_id = my_credentials.data[0]["club_id"]
+
+    buddy_rows = (
+        supabase
+        .table("teesheet_buddies")
+        .select("buddy_member_no,buddy_first_name,buddy_last_name")
+        .eq("user_id", user_id)
+        .order("buddy_last_name")
+        .execute()
+    )
+    buddies = buddy_rows.data or []
+
+    if not buddies:
+        return []
+
+    member_nos = [b["buddy_member_no"] for b in buddies]
+
+    matches_response = (
+        supabase
+        .table("teesheet_credentials")
+        .select("user_id,club_number")
+        .eq("club_id", club_id)
+        .in_("club_number", member_nos)
+        .execute()
+    )
+    user_id_by_club_number = {
+        row["club_number"]: row["user_id"] for row in matches_response.data or [] if row["user_id"] != user_id
+    }
+
+    profile_by_user = {}
+    if user_id_by_club_number:
+        profiles_response = (
+            supabase
+            .table("profiles")
+            .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
+            .in_("user_id", list(user_id_by_club_number.values()))
+            .execute()
+        )
+        profile_by_user = {row["user_id"]: row for row in profiles_response.data or []}
+
+    status_by_other = _relationship_status_map(user_id)
+
+    results = []
+    for buddy in buddies:
+        other_id = user_id_by_club_number.get(buddy["buddy_member_no"])
+        relationship = status_by_other.get(other_id, "none") if other_id else None
+
+        if relationship == "friends":
+            continue
+
+        name = f'{buddy.get("buddy_first_name") or ""} {buddy.get("buddy_last_name") or ""}'.strip()
+
+        results.append({
+            "buddy_name": name or "Unknown",
+            "on_golfcircle": other_id is not None,
+            "user_id": other_id,
+            "display_name": _display_name(profile_by_user.get(other_id)) if other_id else None,
+            "avatar_url": _avatar_url(profile_by_user.get(other_id)) if other_id else None,
+            "relationship": relationship,
+        })
+
+    return results
+
+
 def auto_friend_teesheet_buddies(user_id: str, club_id: int, buddy_member_nos: list[str]) -> int:
     """Teesheet buddies are real-world frequent playing partners -- if one is
     also a GolfCircle user at the same club, connect them directly rather
