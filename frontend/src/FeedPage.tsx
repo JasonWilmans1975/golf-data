@@ -12,6 +12,7 @@ type ReactionSummary = {
     counts: Record<string, number>;
     total: number;
     my_reaction: string | null;
+    recent_reactor_names: string[];
 };
 
 type ReactionDetail = {
@@ -321,7 +322,26 @@ function applyReaction(
 
     const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
 
-    return { counts, total, my_reaction: newMine };
+    // Best-effort optimistic update -- matches the backend's "You" convention
+    // for the viewer's own reaction until the next full feed reload.
+    let recentReactorNames = current.recent_reactor_names.filter((name) => name !== "You");
+    if (newMine) recentReactorNames = ["You", ...recentReactorNames].slice(0, 5);
+
+    return { counts, total, my_reaction: newMine, recent_reactor_names: recentReactorNames };
+}
+
+// "Liked by You and 4 others" / "Liked by Dave, Brent and 2 others" / "Liked by Dave"
+function formatLikedBy(names: string[], total: number): string | null {
+    if (total === 0 || names.length === 0) return null;
+
+    const shown = names.slice(0, 2);
+    const remaining = total - shown.length;
+
+    if (remaining <= 0) {
+        return `Liked by ${shown.join(" and ")}`;
+    }
+
+    return `Liked by ${shown.join(", ")} and ${remaining} other${remaining === 1 ? "" : "s"}`;
 }
 
 // Hoisted to module scope (not defined inside FeedPage) so React sees a
@@ -1351,6 +1371,16 @@ function FeedPage() {
                                     <a className="book-round-button" href={`tel:${item.course_phone}`}>
                                         📞 Book a round
                                     </a>
+                                )}
+
+                                {formatLikedBy(item.reactions.recent_reactor_names, item.reactions.total) && (
+                                    <button
+                                        type="button"
+                                        className="post-reaction-liked-by"
+                                        onClick={() => openReactionDetails(item.item_type, item.item_id)}
+                                    >
+                                        {formatLikedBy(item.reactions.recent_reactor_names, item.reactions.total)}
+                                    </button>
                                 )}
 
                                 <div className="feed-actions-row">

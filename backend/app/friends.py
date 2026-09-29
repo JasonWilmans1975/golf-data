@@ -630,7 +630,7 @@ REACTIONS = {"like", "love", "haha", "wow", "sad", "angry"}
 
 
 def _empty_reactions() -> dict:
-    return {"counts": {}, "total": 0, "my_reaction": None}
+    return {"counts": {}, "total": 0, "my_reaction": None, "reactor_ids": [], "recent_reactor_names": []}
 
 
 def _reaction_summary(viewer_id: str, items: list[tuple[str, int]]) -> dict[tuple[str, int], dict]:
@@ -640,9 +640,10 @@ def _reaction_summary(viewer_id: str, items: list[tuple[str, int]]) -> dict[tupl
     response = (
         supabase
         .table("feed_likes")
-        .select("item_type,item_id,user_id,reaction")
+        .select("item_type,item_id,user_id,reaction,created_at")
         .in_("item_type", list({item_type for item_type, _ in items}))
         .in_("item_id", list({item_id for _, item_id in items}))
+        .order("created_at", desc=True)
         .execute()
     )
 
@@ -659,10 +660,47 @@ def _reaction_summary(viewer_id: str, items: list[tuple[str, int]]) -> dict[tupl
         entry["counts"][row["reaction"]] = entry["counts"].get(row["reaction"], 0) + 1
         entry["total"] += 1
 
+        if len(entry["reactor_ids"]) < 5:
+            entry["reactor_ids"].append(row["user_id"])
+
         if row["user_id"] == viewer_id:
             entry["my_reaction"] = row["reaction"]
 
     return summary
+
+
+def _reactor_names(viewer_id: str, reactions: dict, profile_by_user: dict[str, dict]) -> list[str]:
+    return [
+        "You" if uid == viewer_id else _display_name(profile_by_user.get(uid))
+        for uid in reactions.get("reactor_ids", [])
+    ]
+
+
+def _attach_recent_reactor_names(
+    viewer_id: str, reactions_by_item: dict[tuple[str, int], dict], profile_by_user: dict[str, dict]
+) -> None:
+    """Fills in `recent_reactor_names` for a batch of reaction summaries,
+    fetching any reactor profiles not already present (e.g. a friend who
+    reacted but doesn't own any item on this page)."""
+    missing_ids = {
+        uid
+        for reactions in reactions_by_item.values()
+        for uid in reactions.get("reactor_ids", [])
+        if uid not in profile_by_user
+    }
+
+    if missing_ids:
+        response = (
+            supabase
+            .table("profiles")
+            .select("user_id,display_name,email,surname,nickname,display_preference,avatar_url")
+            .in_("user_id", list(missing_ids))
+            .execute()
+        )
+        profile_by_user.update({row["user_id"]: row for row in response.data or []})
+
+    for reactions in reactions_by_item.values():
+        reactions["recent_reactor_names"] = _reactor_names(viewer_id, reactions, profile_by_user)
 
 
 def _resolve_reactable_owner(item_type: str, item_id: int) -> str | None:
@@ -725,7 +763,9 @@ def toggle_reaction(user_id: str, item_type: str, item_id: int, reaction: str) -
 
 def get_item_reactions(user_id: str, item_type: str, item_id: int) -> dict:
     summary = _reaction_summary(user_id, [(item_type, item_id)])
-    return summary.get((item_type, item_id), _empty_reactions())
+    reactions = summary.get((item_type, item_id), _empty_reactions())
+    _attach_recent_reactor_names(user_id, {(item_type, item_id): reactions}, {})
+    return reactions
 
 
 def get_item_reaction_details(user_id: str, item_type: str, item_id: int) -> list[dict]:
@@ -1318,6 +1358,8 @@ def get_activity_feed_with_comments(user_id: str, limit: int = 20, offset: int =
         course_by_id = courses_future.result()
         reactions_by_item = reactions_future.result()
         comments_by_key = comments_future.result()
+
+    _attach_recent_reactor_names(user_id, reactions_by_item, profile_by_user)
 
     items = []
     for entry in page:
