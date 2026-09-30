@@ -940,6 +940,7 @@ async def upload_story(
     file: UploadFile | None = File(None),
     caption: str = Form(None),
     background_color: str = Form(None),
+    visibility: str = Form("friends"),
     user_id: str = Depends(get_current_user_id),
 ):
     photo_url = None
@@ -958,7 +959,7 @@ async def upload_story(
         photo_url = supabase.storage.from_(STORY_PHOTOS_BUCKET).get_public_url(path)
 
     try:
-        return create_story(user_id, photo_url, caption, background_color)
+        return create_story(user_id, photo_url, caption, background_color, visibility)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc))
 

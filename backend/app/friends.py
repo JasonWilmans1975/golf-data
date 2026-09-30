@@ -725,13 +725,26 @@ def _resolve_reactable_owner(item_type: str, item_id: int) -> str | None:
     raise ValueError("Invalid item type")
 
 
+def _can_view_reactable(viewer_id: str, item_type: str, item_id: int, owner_id: str) -> bool:
+    """Same rule _can_view_item uses everywhere else (owner or friend),
+    except a story with visibility='everyone' is reactable by anyone --
+    the one item type in this app with a genuinely public-within-the-app
+    audience option."""
+    if item_type == "story":
+        story_response = supabase.table("stories").select("visibility").eq("id", item_id).limit(1).execute()
+        if story_response.data and story_response.data[0]["visibility"] == "everyone":
+            return True
+
+    return _can_view_item(viewer_id, owner_id)
+
+
 def toggle_reaction(user_id: str, item_type: str, item_id: int, reaction: str) -> dict:
     if reaction not in REACTIONS:
         raise ValueError("Invalid reaction")
 
     owner_id = _resolve_reactable_owner(item_type, item_id)
 
-    if owner_id is None or not _can_view_item(user_id, owner_id):
+    if owner_id is None or not _can_view_reactable(user_id, item_type, item_id, owner_id):
         raise ValueError("Not found")
 
     existing = (
@@ -778,7 +791,7 @@ def get_item_reaction_details(user_id: str, item_type: str, item_id: int) -> lis
     counts get_item_reactions returns."""
     owner_id = _resolve_reactable_owner(item_type, item_id)
 
-    if owner_id is None or not _can_view_item(user_id, owner_id):
+    if owner_id is None or not _can_view_reactable(user_id, item_type, item_id, owner_id):
         raise ValueError("Not found")
 
     response = (

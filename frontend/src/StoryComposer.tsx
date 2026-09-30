@@ -19,7 +19,12 @@ export function StoryComposer({
     uploading,
 }: {
     onClose: () => void;
-    onShare: (input: { file: File | null; caption: string; backgroundColor: string | null }) => void;
+    onShare: (input: {
+        file: File | null;
+        caption: string;
+        backgroundColor: string | null;
+        visibility: "friends" | "everyone";
+    }) => void;
     uploading: boolean;
 }) {
     const [step, setStep] = useState<"choose" | "photo" | "text">("choose");
@@ -27,6 +32,7 @@ export function StoryComposer({
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [caption, setCaption] = useState("");
     const [background, setBackground] = useState(BACKGROUND_PRESETS[0].id);
+    const [visibility, setVisibility] = useState<"friends" | "everyone">("friends");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -51,9 +57,9 @@ export function StoryComposer({
 
     function handleShare() {
         if (step === "photo" && file) {
-            onShare({ file, caption, backgroundColor: null });
+            onShare({ file, caption, backgroundColor: null, visibility });
         } else if (step === "text" && caption.trim()) {
-            onShare({ file: null, caption, backgroundColor: background });
+            onShare({ file: null, caption, backgroundColor: background, visibility });
         }
     }
 
@@ -138,6 +144,28 @@ export function StoryComposer({
                             ))}
                         </div>
                     </>
+                )}
+
+                {step !== "choose" && (
+                    <div className="story-composer-visibility">
+                        <span>Who can see this?</span>
+                        <div className="story-composer-visibility-toggle">
+                            <button
+                                type="button"
+                                className={visibility === "friends" ? "active" : ""}
+                                onClick={() => setVisibility("friends")}
+                            >
+                                Friends
+                            </button>
+                            <button
+                                type="button"
+                                className={visibility === "everyone" ? "active" : ""}
+                                onClick={() => setVisibility("everyone")}
+                            >
+                                All of GolfCircle
+                            </button>
+                        </div>
+                    </div>
                 )}
 
                 {step !== "choose" && (

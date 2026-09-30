@@ -836,11 +836,16 @@ function FeedPage() {
         }
     }
 
-    async function handleShareStory(input: { file: File | null; caption: string; backgroundColor: string | null }) {
+    async function handleShareStory(input: {
+        file: File | null;
+        caption: string;
+        backgroundColor: string | null;
+        visibility: "friends" | "everyone";
+    }) {
         setStoryUploading(true);
 
         try {
-            await uploadStory(input.file, input.caption, input.backgroundColor);
+            await uploadStory(input.file, input.caption, input.backgroundColor, input.visibility);
             await loadStories();
             setStoryComposerOpen(false);
         } catch (error) {

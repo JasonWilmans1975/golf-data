@@ -141,6 +141,11 @@ export function StoryViewer({
             <div className="story-viewer-header">
                 <Avatar name={group.display_name} avatarUrl={group.avatar_url} small />
                 <span>{group.display_name}</span>
+                {story.visibility === "everyone" && (
+                    <span className="story-viewer-visibility-badge" title="Visible to all of GolfCircle">
+                        🌍
+                    </span>
+                )}
                 <button type="button" className="story-viewer-close" onClick={onClose} aria-label="Close">
                     ✕
                 </button>

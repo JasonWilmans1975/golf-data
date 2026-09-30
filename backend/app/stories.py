@@ -17,8 +17,15 @@ def _active_since() -> str:
     return (datetime.now(timezone.utc) - STORY_LIFETIME).isoformat()
 
 
+STORY_VISIBILITIES = {"friends", "everyone"}
+
+
 def create_story(
-    user_id: str, photo_url: str | None, caption: str | None, background_color: str | None
+    user_id: str,
+    photo_url: str | None,
+    caption: str | None,
+    background_color: str | None,
+    visibility: str = "friends",
 ) -> dict:
     """A story is either a photo (with an optional short caption) or, when
     photo_url is None, a text-only story -- inferred from photo_url being
@@ -26,6 +33,9 @@ def create_story(
     needs actual text; background_color only means anything for that case."""
     caption = (caption or "").strip()
     is_text_only = photo_url is None
+
+    if visibility not in STORY_VISIBILITIES:
+        raise ValueError("Invalid visibility")
 
     if is_text_only:
         if not caption:
@@ -46,6 +56,7 @@ def create_story(
             "photo_url": photo_url,
             "caption": caption,
             "background_color": background_color,
+            "visibility": visibility,
         })
         .execute()
     )
@@ -54,16 +65,19 @@ def create_story(
 
 
 def list_stories(user_id: str) -> list[dict]:
-    """The Feed's story bar: every active (< 24h old) story from the
-    viewer's circle, grouped per author with a viewed/unviewed flag per
-    story so the frontend can ring each avatar accordingly."""
+    """The Feed's story bar: every active (< 24h old) story either from the
+    viewer's own circle (any visibility -- your friends' "friends"-only
+    stories are still yours to see) or from anyone at all who chose
+    "everyone" for that story, grouped per author with a viewed/unviewed
+    flag per story so the frontend can ring each avatar accordingly."""
     circle_ids = list(set(list_friend_ids(user_id) + [user_id]))
+    circle_filter = ",".join(circle_ids)
 
     response = (
         supabase
         .table("stories")
-        .select("id,user_id,photo_url,caption,background_color,created_at")
-        .in_("user_id", circle_ids)
+        .select("id,user_id,photo_url,caption,background_color,visibility,created_at")
+        .or_(f"user_id.in.({circle_filter}),visibility.eq.everyone")
         .gte("created_at", _active_since())
         .order("created_at")
         .execute()
@@ -113,6 +127,7 @@ def list_stories(user_id: str) -> list[dict]:
             "photo_url": row["photo_url"],
             "caption": row["caption"],
             "background_color": row["background_color"],
+            "visibility": row["visibility"],
             "created_at": row["created_at"],
             "viewed_by_me": viewed,
             "reactions": reactions_by_story.get(("story", row["id"]), _empty_reactions()),
@@ -139,17 +154,18 @@ def list_stories(user_id: str) -> list[dict]:
 
 
 def record_story_view(viewer_id: str, story_id: int) -> None:
-    response = supabase.table("stories").select("id,user_id").eq("id", story_id).limit(1).execute()
+    response = supabase.table("stories").select("id,user_id,visibility").eq("id", story_id).limit(1).execute()
 
     if not response.data:
         raise ValueError("Story not found")
 
-    owner_id = response.data[0]["user_id"]
+    story = response.data[0]
+    owner_id = story["user_id"]
 
     if owner_id == viewer_id:
         return
 
-    if owner_id not in list_friend_ids(viewer_id):
+    if story["visibility"] != "everyone" and owner_id not in list_friend_ids(viewer_id):
         raise ValueError("Story not found")
 
     existing = (

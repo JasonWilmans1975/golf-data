@@ -176,7 +176,12 @@ export async function uploadAvatarPhoto(file: File) {
     return (await response.json()) as { avatar_url: string };
 }
 
-export async function uploadStory(file: File | null, caption: string, backgroundColor: string | null) {
+export async function uploadStory(
+    file: File | null,
+    caption: string,
+    backgroundColor: string | null,
+    visibility: "friends" | "everyone"
+) {
     const formData = new FormData();
 
     if (file) {
@@ -185,6 +190,7 @@ export async function uploadStory(file: File | null, caption: string, background
     }
     if (caption.trim()) formData.append("caption", caption.trim());
     if (backgroundColor) formData.append("background_color", backgroundColor);
+    formData.append("visibility", visibility);
 
     const response = await authFetch(`${API}/stories`, {
         method: "POST",

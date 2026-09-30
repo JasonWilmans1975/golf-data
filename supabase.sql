@@ -729,3 +729,10 @@ alter table public.feed_likes add constraint feed_likes_item_type_check
 -- unthrottled "Sync now" button let a user hammer 5 login strategies
 -- against Garmin every time they clicked it, worsening the block.
 alter table if exists public.garmin_sync_state add column if not exists last_attempted_at timestamptz;
+
+-- Per-story audience choice: 'friends' (default, matches every other
+-- story behavior so far) or 'everyone' -- the first genuinely public-
+-- within-the-app audience anywhere in this codebase, deliberately scoped
+-- to just Stories rather than changing the whole app's friend-gated
+-- privacy model.
+alter table if exists public.stories add column if not exists visibility text not null default 'friends' check (visibility in ('friends', 'everyone'));

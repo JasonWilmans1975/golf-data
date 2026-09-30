@@ -6,6 +6,7 @@ export type Story = {
     photo_url: string | null;
     caption: string | null;
     background_color: string | null;
+    visibility: "friends" | "everyone";
     created_at: string;
     viewed_by_me: boolean;
     reactions: ReactionSummary;
