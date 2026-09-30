@@ -721,3 +721,11 @@ end $$;
 
 alter table public.feed_likes add constraint feed_likes_item_type_check
   check (item_type in ('round', 'post', 'comment', 'story'));
+
+-- Tracks every sync ATTEMPT (success or failure), separate from
+-- last_synced_at (success only), so a force sync can be cooled down even
+-- when every attempt is failing -- Garmin's own Cloudflare bot-detection
+-- rate-limits/blocks repeated login attempts from the same IP, and an
+-- unthrottled "Sync now" button let a user hammer 5 login strategies
+-- against Garmin every time they clicked it, worsening the block.
+alter table if exists public.garmin_sync_state add column if not exists last_attempted_at timestamptz;

@@ -19,6 +19,15 @@ GARMIN_LOOKBACK_DAYS = 365 * 5
 GARMIN_WELLNESS_BACKFILL_DAYS = 100
 GARMIN_WELLNESS_ROLLING_DAYS = 5
 
+# Garmin's own Cloudflare bot-detection rate-limits/blocks login attempts
+# from an IP that retries too often -- an unthrottled "Sync now" let a user
+# re-trigger all 5 of _login_sync's fallback strategies every time they
+# clicked it, which only makes an active block worse. This cooldown applies
+# even to force=True, keyed off last_attempted_at (set on every attempt,
+# success or failure) rather than last_synced_at (success only), so it
+# still kicks in while every attempt is failing.
+FORCE_SYNC_COOLDOWN = timedelta(minutes=3)
+
 # Garmin has no batch endpoint for whole-day average heart rate (only
 # per-day intraday samples), so a deep backfill means one call per day.
 # Fetching them concurrently keeps a 100-day backfill from taking minutes.
@@ -230,6 +239,32 @@ def _mark_synced_now(user_id: str):
     }).execute()
 
 
+def _seconds_until_force_sync_allowed(user_id: str) -> int:
+    state = (
+        supabase
+        .table("garmin_sync_state")
+        .select("last_attempted_at")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if not state.data or not state.data[0]["last_attempted_at"]:
+        return 0
+
+    last_attempted_at = datetime.fromisoformat(state.data[0]["last_attempted_at"])
+    elapsed = datetime.now(timezone.utc) - last_attempted_at.astimezone(timezone.utc)
+    remaining = FORCE_SYNC_COOLDOWN - elapsed
+
+    return max(0, int(remaining.total_seconds()))
+
+
+def _mark_attempted_now(user_id: str):
+    supabase.table("garmin_sync_state").upsert({
+        "user_id": user_id,
+        "last_attempted_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+
+
 def _run_full_sync(user_id: str, start_date: str) -> dict:
     api = _login_sync(user_id)
     activities = _fetch_golf_activities(api, start_date)
@@ -247,6 +282,16 @@ def _run_full_sync(user_id: str, start_date: str) -> dict:
 async def sync_garmin_data(user_id: str, force: bool = False):
     if not force and _already_synced_today(user_id):
         return {"skipped": True, "reason": "Already synced today"}
+
+    if force:
+        wait_seconds = _seconds_until_force_sync_allowed(user_id)
+        if wait_seconds > 0:
+            raise RuntimeError(
+                f"Garmin sync was just attempted -- please wait {wait_seconds}s before trying again "
+                "(repeated attempts can make Garmin's own rate limiting worse)"
+            )
+
+    _mark_attempted_now(user_id)
 
     start_date = (
         datetime.now(timezone.utc) - timedelta(days=GARMIN_LOOKBACK_DAYS)
