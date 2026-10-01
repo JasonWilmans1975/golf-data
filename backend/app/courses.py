@@ -207,17 +207,7 @@ async def find_course_by_name(name: str):
     }
 
 
-async def geocode_courses_without_gps():
-    response = (
-        supabase
-        .table("courses")
-        .select("id,name")
-        .is_("latitude", "null")
-        .execute()
-    )
-
-    courses = response.data or []
-
+async def _geocode_course_rows(courses: list[dict]) -> dict:
     geocoded = 0
     failed = []
 
@@ -244,6 +234,34 @@ async def geocode_courses_without_gps():
             })
 
     return {"checked": len(courses), "geocoded": geocoded, "failed": failed}
+
+
+async def geocode_courses_without_gps():
+    response = (
+        supabase
+        .table("courses")
+        .select("id,name")
+        .is_("latitude", "null")
+        .execute()
+    )
+
+    return await _geocode_course_rows(response.data or [])
+
+
+async def geocode_courses_by_id(course_ids: list[int]) -> dict:
+    """Same lookup as geocode_courses_without_gps (Google Places gives lat/
+    lng + country in one call -- see find_course_by_name), scoped to a
+    specific set of rows instead of scanning the whole table. Used right
+    after a handicap sync creates name-only course rows (handicaps.co.za
+    gives a course name, never GPS) so a newly-played course gets a World
+    Map pin without someone having to remember to run the bulk geocode
+    maintenance route."""
+    if not course_ids:
+        return {"checked": 0, "geocoded": 0, "failed": []}
+
+    response = supabase.table("courses").select("id,name").in_("id", course_ids).execute()
+
+    return await _geocode_course_rows(response.data or [])
 
 
 async def backfill_country_info():
@@ -721,6 +739,7 @@ def match_handicap_scores_to_courses(user_id: str):
     # timeout before finishing, so the sync never got marked complete and
     # kept silently re-running on every page load.
     new_keys = [key for key in groups if key not in by_normalized]
+    created_course_ids: list[int] = []
 
     if new_keys:
         insert_response = (
@@ -732,6 +751,7 @@ def match_handicap_scores_to_courses(user_id: str):
 
         for course in insert_response.data:
             by_normalized[_normalize_course_name(course["name"])] = course["id"]
+            created_course_ids.append(course["id"])
 
     score_updates = [
         {"score_id": score_id, "course_id": by_normalized[key], "play_date": play_date}
@@ -742,4 +762,8 @@ def match_handicap_scores_to_courses(user_id: str):
     if score_updates:
         supabase.table("handicap_scores").upsert(score_updates, on_conflict="score_id").execute()
 
-    return {"matched": len(score_updates), "created_courses": len(new_keys)}
+    return {
+        "matched": len(score_updates),
+        "created_courses": len(new_keys),
+        "created_course_ids": created_course_ids,
+    }

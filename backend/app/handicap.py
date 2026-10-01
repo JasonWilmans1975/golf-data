@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 from starlette.concurrency import run_in_threadpool
 
 from .db import supabase, fetch_all, execute_with_retry, retry_whole_sync
-from .courses import match_handicap_scores_to_courses
+from .courses import match_handicap_scores_to_courses, geocode_courses_by_id
 from .crypto import encrypt, decrypt
 from .milestones import check_and_award_milestones
 from .leaderboard import maybe_post_daily_leaderboard
@@ -331,7 +331,18 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
     # freeze its event loop (and every other concurrent request it's
     # serving, down to a trivial CORS preflight) for however long it takes.
     # Running it on a thread pool worker instead keeps the loop free.
-    return await run_in_threadpool(_finish_sync, user_id, data, is_first_sync)
+    result = await run_in_threadpool(_finish_sync, user_id, data, is_first_sync)
+
+    # handicaps.co.za only ever gives a course name, never GPS, so a newly
+    # matched course lands with no coordinates -- geocode it immediately
+    # (Google Places gives lat/lng + country in one call) rather than
+    # leaving it invisible on the World Map until someone remembers to run
+    # the bulk /courses/geocode maintenance route.
+    new_course_ids = result.pop("created_course_ids", [])
+    if new_course_ids:
+        await geocode_courses_by_id(new_course_ids)
+
+    return result
 
 
 def _finish_sync(user_id: str, data: dict, is_first_sync: bool) -> dict:
@@ -394,6 +405,7 @@ def _finish_sync(user_id: str, data: dict, is_first_sync: bool) -> dict:
         "current_handicap_index": data["current_index"],
         "courses_matched": course_match["matched"],
         "courses_created": course_match["created_courses"],
+        "created_course_ids": course_match["created_course_ids"],
     }
 
 
