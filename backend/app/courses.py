@@ -248,22 +248,6 @@ async def geocode_courses_without_gps():
     return await _geocode_course_rows(response.data or [])
 
 
-async def geocode_courses_by_id(course_ids: list[int]) -> dict:
-    """Same lookup as geocode_courses_without_gps (Google Places gives lat/
-    lng + country in one call -- see find_course_by_name), scoped to a
-    specific set of rows instead of scanning the whole table. Used right
-    after a handicap sync creates name-only course rows (handicaps.co.za
-    gives a course name, never GPS) so a newly-played course gets a World
-    Map pin without someone having to remember to run the bulk geocode
-    maintenance route."""
-    if not course_ids:
-        return {"checked": 0, "geocoded": 0, "failed": []}
-
-    response = supabase.table("courses").select("id,name").in_("id", course_ids).execute()
-
-    return await _geocode_course_rows(response.data or [])
-
-
 async def backfill_country_info():
     response = (
         supabase
@@ -342,22 +326,7 @@ async def _fetch_photo_url(photo_name: str) -> str | None:
         return response.json().get("photoUri")
 
 
-async def backfill_course_details():
-    """Pull website/phone/description/a representative photo from Google
-    Places for every played course, resolving a Place ID by name first for
-    any course that doesn't have one yet (e.g. created purely from a
-    handicaps.co.za name match, never geocoded).
-    """
-    response = (
-        supabase
-        .table("courses")
-        .select("id,name,google_place_id,latitude")
-        .is_("details_fetched_at", "null")
-        .execute()
-    )
-
-    courses = response.data or []
-
+async def _backfill_details_for_rows(courses: list[dict]) -> dict:
     updated = 0
     failed = []
 
@@ -434,6 +403,41 @@ async def backfill_course_details():
             })
 
     return {"checked": len(courses), "updated": updated, "failed": failed}
+
+
+async def backfill_course_details():
+    """Pull website/phone/description/a representative photo from Google
+    Places for every played course, resolving a Place ID by name first for
+    any course that doesn't have one yet (e.g. created purely from a
+    handicaps.co.za name match, never geocoded)."""
+    response = (
+        supabase
+        .table("courses")
+        .select("id,name,google_place_id,latitude")
+        .is_("details_fetched_at", "null")
+        .execute()
+    )
+
+    return await _backfill_details_for_rows(response.data or [])
+
+
+async def backfill_course_details_by_id(course_ids: list[int]) -> dict:
+    """Same as backfill_course_details, scoped to specific rows -- used
+    right after a handicap sync creates name-only course rows, so a newly
+    played course gets its map pin, photo, and phone number without
+    waiting on (or slowing down every sync with) the full backlog scan."""
+    if not course_ids:
+        return {"checked": 0, "updated": 0, "failed": []}
+
+    response = (
+        supabase
+        .table("courses")
+        .select("id,name,google_place_id,latitude")
+        .in_("id", course_ids)
+        .execute()
+    )
+
+    return await _backfill_details_for_rows(response.data or [])
 
 
 def get_countries_played(user_id: str):

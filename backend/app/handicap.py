@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 from starlette.concurrency import run_in_threadpool
 
 from .db import supabase, fetch_all, execute_with_retry, retry_whole_sync
-from .courses import match_handicap_scores_to_courses, geocode_courses_by_id
+from .courses import match_handicap_scores_to_courses, backfill_course_details_by_id
 from .crypto import encrypt, decrypt
 from .milestones import check_and_award_milestones
 from .leaderboard import maybe_post_daily_leaderboard
@@ -333,14 +333,14 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
     # Running it on a thread pool worker instead keeps the loop free.
     result = await run_in_threadpool(_finish_sync, user_id, data, is_first_sync)
 
-    # handicaps.co.za only ever gives a course name, never GPS, so a newly
-    # matched course lands with no coordinates -- geocode it immediately
-    # (Google Places gives lat/lng + country in one call) rather than
-    # leaving it invisible on the World Map until someone remembers to run
-    # the bulk /courses/geocode maintenance route.
+    # handicaps.co.za only ever gives a course name, never GPS/photo/phone,
+    # so a newly matched course lands with none of that -- backfill it
+    # immediately rather than leaving it invisible on the World Map (and
+    # missing its photo/contact number on the Feed) until someone
+    # remembers to run the bulk /courses/backfill-details maintenance route.
     new_course_ids = result.pop("created_course_ids", [])
     if new_course_ids:
-        await geocode_courses_by_id(new_course_ids)
+        await backfill_course_details_by_id(new_course_ids)
 
     return result
 
