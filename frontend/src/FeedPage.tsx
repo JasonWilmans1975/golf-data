@@ -1626,14 +1626,21 @@ function FeedPage() {
 
                     {viewMode === "feed" && (
                         <div className="feed-filter-pills">
-                            <select
-                                className="feed-filter-select"
-                                value={feedScope}
-                                onChange={(event) => selectFeedScope(event.target.value as "everyone" | "friends")}
-                            >
-                                <option value="everyone">Everyone</option>
-                                <option value="friends">Only friends</option>
-                            </select>
+                            <label className="feed-scope-toggle">
+                                <span>Friends only</span>
+                                <span className="toggle-switch">
+                                    <input
+                                        type="checkbox"
+                                        checked={feedScope === "friends"}
+                                        onChange={(event) =>
+                                            selectFeedScope(event.target.checked ? "friends" : "everyone")
+                                        }
+                                    />
+                                    <span className="toggle-switch-track">
+                                        <span className="toggle-switch-thumb" />
+                                    </span>
+                                </span>
+                            </label>
 
                             <select
                                 className="feed-filter-select"
