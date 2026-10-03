@@ -331,7 +331,7 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
     # freeze its event loop (and every other concurrent request it's
     # serving, down to a trivial CORS preflight) for however long it takes.
     # Running it on a thread pool worker instead keeps the loop free.
-    result = await run_in_threadpool(_finish_sync, user_id, data, is_first_sync)
+    result = await run_in_threadpool(_finish_sync, user_id, data, is_first_sync, known_score_ids)
 
     # handicaps.co.za only ever gives a course name, never GPS/photo/phone,
     # so a newly matched course lands with none of that -- backfill it
@@ -345,7 +345,7 @@ async def sync_handicap_data(user_id: str, force: bool = False, full_resync: boo
     return result
 
 
-def _finish_sync(user_id: str, data: dict, is_first_sync: bool) -> dict:
+def _finish_sync(user_id: str, data: dict, is_first_sync: bool, known_score_ids: set[int]) -> dict:
     # A successful login proves the credentials are good right now, even if
     # they were flagged invalid before (e.g. a past rejection that turned
     # out to be transient) -- clearing it here is what lets the nightly
@@ -377,6 +377,17 @@ def _finish_sync(user_id: str, data: dict, is_first_sync: bool) -> dict:
             "is_nine_hole": bool(score.get("IsNineHole")),
         })
 
+    # Everything fetched still gets upserted, even rows we already had --
+    # a played round never changes, but a backdated correction to one
+    # occasionally does, and on_conflict is what picks that up. "synced"
+    # below is reported separately as just the genuinely new rows, though,
+    # since the page-size-500 pagination in GET_MY_SCORES_SCRIPT means a
+    # normal sync routinely re-fetches (and so re-upserts) most of a
+    # user's history even when only a couple of rounds are actually new --
+    # reporting len(rows) there made every sync claim to have "synced"
+    # someone's entire round history.
+    new_score_count = sum(1 for row in rows if row["score_id"] not in known_score_ids)
+
     if rows:
         supabase.table("handicap_scores").upsert(rows, on_conflict="score_id").execute()
 
@@ -400,7 +411,7 @@ def _finish_sync(user_id: str, data: dict, is_first_sync: bool) -> dict:
 
     return {
         "skipped": False,
-        "synced": len(rows),
+        "synced": new_score_count,
         "total_seen": len(scores),
         "current_handicap_index": data["current_index"],
         "courses_matched": course_match["matched"],
