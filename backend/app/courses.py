@@ -714,7 +714,7 @@ def match_handicap_scores_to_courses(user_id: str):
     )
 
     if not unmatched:
-        return {"matched": 0, "created_courses": 0}
+        return {"matched": 0, "created_courses": 0, "created_course_ids": []}
 
     courses_response = supabase.table("courses").select("id,name").execute()
 
